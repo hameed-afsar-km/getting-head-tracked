@@ -64,6 +64,7 @@ export const HEAD_TRACKING_CONFIG: HeadTrackingConfig = {
 
 /** Public URL for the GLB model served from Next.js public directory */
 export const MODEL_URL = '/models/3d.glb';
+export const HERO_MODEL_URL = '/models/hero2.glb';
 
 /** Section count derived from waypoints */
 export const SECTION_COUNT = ROUTE_CONFIG.waypoints.length;

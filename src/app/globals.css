@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;500;700;900&family=Inter:wght@300;400;500;600&display=swap');
 
 /* ── Reset & base ───────────────────────────────────────────── */
 *, *::before, *::after {
@@ -6,36 +6,82 @@
 }
 
 html, body {
-  height: 100%;
   margin: 0;
   padding: 0;
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
-/* Ensure the 3D canvas renders at full resolution */
+body {
+  background: #000;
+  color: #f1f5f9;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
 canvas {
   display: block;
 }
 
-/* Remove default button styles */
 button {
   font-family: inherit;
 }
 
-/* Scrollbar styling */
+/* Iron Man color tokens */
+:root {
+  --red: #cc0000;
+  --red-glow: #ff1111;
+  --gold: #c8a84b;
+  --gold-light: #f0c84a;
+  --dark: #050505;
+  --panel: rgba(8, 8, 12, 0.88);
+  --border: rgba(204, 0, 0, 0.3);
+  --border-gold: rgba(200, 168, 75, 0.35);
+  --text-dim: rgba(241, 245, 249, 0.5);
+  --hud-glow: 0 0 20px rgba(204, 0, 0, 0.5);
+}
+
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 179, 237, 0.3);
+  background: rgba(204, 0, 0, 0.4);
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 179, 237, 0.5);
+  background: rgba(204, 0, 0, 0.7);
 }
+
+/* Scan line overlay for HUD feel */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.05) 2px,
+    rgba(0,0,0,0.05) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* HUD corner bracket */
+.hud-corner {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+}
+.hud-corner.tl { top: 0; left: 0; border-top: 1px solid var(--red-glow); border-left: 1px solid var(--red-glow); }
+.hud-corner.tr { top: 0; right: 0; border-top: 1px solid var(--red-glow); border-right: 1px solid var(--red-glow); }
+.hud-corner.bl { bottom: 0; left: 0; border-bottom: 1px solid var(--red-glow); border-left: 1px solid var(--red-glow); }
+.hud-corner.br { bottom: 0; right: 0; border-bottom: 1px solid var(--red-glow); border-right: 1px solid var(--red-glow); }
 
 /* Reduced-motion overrides */
 @media (prefers-reduced-motion: reduce) {
@@ -43,4 +89,33 @@ button {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Stark HUD interactive animations */
+@keyframes hudPulse {
+  0% { transform: scale(0.9); opacity: 0.9; }
+  50% { transform: scale(1.4); opacity: 0.35; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+
+@keyframes laserSweep {
+  0% { top: 12%; opacity: 0.2; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { top: 88%; opacity: 0.1; }
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGlow {
+  from { opacity: 0.8; filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.4)); }
+  to { opacity: 1; filter: drop-shadow(0 0 25px rgba(0, 240, 255, 0.8)); }
+}
+
+@keyframes rotateHud {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

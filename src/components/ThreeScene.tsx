@@ -80,12 +80,11 @@ function Model({ onReady, onError }: ModelProps) {
   useEffect(() => {
     if (scene && !notifiedRef.current) {
       notifiedRef.current = true;
-      // Enable shadow receiving on all meshes
       scene.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
-          obj.castShadow = true;
-          obj.receiveShadow = true;
-          // Enhance PBR metallic materials (Iron Man armor, cars, chrome wheels)
+          // Keep shadows off on individual meshes — only key spotlights cast
+          obj.castShadow = false;
+          obj.receiveShadow = false;
           if (obj.material instanceof THREE.MeshStandardMaterial) {
             if (obj.material.map) {
               obj.material.map.colorSpace = THREE.SRGBColorSpace;
@@ -93,7 +92,6 @@ function Model({ onReady, onError }: ModelProps) {
             if (obj.material.emissiveMap) {
               obj.material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
             }
-            // Balanced metallic environment reflections
             obj.material.envMapIntensity = 1.35;
             if (obj.material.roughness < 0.12) {
               obj.material.roughness = 0.16;
@@ -408,9 +406,9 @@ function TargetedSpotLight({
         angle={angle}
         penumbra={penumbra}
         color={color}
-        castShadow={castShadow}
+        castShadow={false}
         shadow-bias={-0.0002}
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[512, 512]}
       />
     </>
   );
@@ -602,12 +600,13 @@ export function ThreeScene({
         position: [1.332, 1.965, 2.808],
       }}
       gl={{
-        antialias: true,
+        antialias: false,
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: 1.05,
         outputColorSpace: THREE.SRGBColorSpace,
+        powerPreference: 'high-performance',
       }}
-      dpr={Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2)}
+      dpr={[1, 1.5]}
       style={{ position: 'absolute', inset: 0 }}
     >
       <SceneGraph
