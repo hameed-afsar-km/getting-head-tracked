@@ -86,6 +86,20 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
   const lastProcessTimeRef = useRef<number>(0);
   const enabledRef = useRef<boolean>(false);
 
+  // Live config + status mirrors. The render loop is created once inside
+  // `enable()`, so it must read these refs instead of the closure values —
+  // otherwise slider changes (sensitivity, invert) never reach the loop.
+  const configRef = useRef<HeadTrackingConfig>(config);
+  const stateRef = useRef<HeadTrackingState>(state);
+
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
   const setStatus = (
     status: TrackingStatus,
     errorMessage: string | null = null
@@ -237,13 +251,15 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
     const processFrame = () => {
       if (!enabledRef.current || !videoRef.current || !landmarkerRef.current) return;
 
+      const cfg = configRef.current;
+      const sens = cfg.sensitivity;
       const video = videoRef.current;
       const now = performance.now();
       if (
         video &&
         video.readyState >= 2 &&
         video.videoWidth > 0 &&
-        now - lastProcessTimeRef.current >= config.processIntervalMs
+        now - lastProcessTimeRef.current >= cfg.processIntervalMs
       ) {
         lastProcessTimeRef.current = now;
 
@@ -272,27 +288,23 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
             const neutral = neutralRef.current;
 
             // Inverted movement multipliers (default inverted = -1, normal = 1)
-            const invertSign = config.invertMovement !== false ? -1 : 1;
-            const invertYSign = config.invertY !== false ? -1 : 1;
+            const invertSign = cfg.invertMovement !== false ? -1 : 1;
+            const invertYSign = cfg.invertY !== false ? -1 : 1;
 
-            // Raw delta normalized to [-1, 1] with movement direction applied
-            const rawX = clamp(
-              ((noseTip.x - neutral.x) / 0.28) * config.sensitivity * invertSign,
-              -1,
-              1
-            );
+            // Normalized head deflection, independent of sensitivity.
+            // ±1 = head moved across the full tracking range.
+            const rawX = clamp((noseTip.x - neutral.x) / 0.28, -1, 1) * invertSign;
             // Inverted up and down as requested
-            const rawY = clamp(
-              ((noseTip.y - neutral.y) / 0.20) * config.sensitivity * invertYSign,
-              -1,
-              1
-            );
+            const rawY = clamp((noseTip.y - neutral.y) / 0.20, -1, 1) * invertYSign;
             // Depth: larger face = closer to screen
             const depthDelta = (faceSize - neutral.faceSize) / neutral.faceSize;
-            const rawZ = clamp(depthDelta * config.sensitivity * 2 * invertSign, -1, 1);
+            const rawZ = clamp(depthDelta * 2, -1, 1) * invertSign;
+
+            // Deadzone is defined in output space, so scale it back into
+            // deflection space to keep it constant as sensitivity changes.
+            const dz = Math.min(1, cfg.deadZone / Math.max(sens, 0.01));
 
             // Apply smooth cubic deadzone (eliminates center flutter and edge stepping)
-            const dz = config.deadZone;
             const targetX = smoothDeadzone(rawX, dz);
             const targetY = smoothDeadzone(rawY, dz);
             const targetZ = smoothDeadzone(rawZ, dz);
@@ -315,16 +327,27 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
             smoothedRef.current.y += dy * alpha;
             smoothedRef.current.z += dzVal * alpha;
 
-            offsetRef.current = { ...smoothedRef.current };
+            // Sensitivity is applied last so it is a true end-to-end gain:
+            // raising it scales the camera travel instead of just saturating
+            // the clamp earlier.
+            offsetRef.current = {
+              x: smoothedRef.current.x * sens,
+              y: smoothedRef.current.y * sens,
+              z: smoothedRef.current.z * sens,
+            };
 
-            if (state.status === 'no-face') setStatus('active');
+            if (stateRef.current.status === 'no-face') setStatus('active');
           } else {
             // No face — gradually decay offset
             smoothedRef.current.x *= 0.95;
             smoothedRef.current.y *= 0.95;
             smoothedRef.current.z *= 0.95;
-            offsetRef.current = { ...smoothedRef.current };
-            if (state.status === 'active') setStatus('no-face');
+            offsetRef.current = {
+              x: smoothedRef.current.x * sens,
+              y: smoothedRef.current.y * sens,
+              z: smoothedRef.current.z * sens,
+            };
+            if (stateRef.current.status === 'active') setStatus('no-face');
           }
         } catch {
           // Ignore per-frame errors
@@ -335,7 +358,7 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
     };
 
     rafRef.current = requestAnimationFrame(processFrame);
-  }, [config, state.status, stopWebcam]);
+  }, [stopWebcam]);
 
   // Cleanup on unmount
   useEffect(() => {

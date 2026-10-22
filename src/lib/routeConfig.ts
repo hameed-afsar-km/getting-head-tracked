@@ -54,7 +54,9 @@ export const HEAD_TRACKING_CONFIG: HeadTrackingConfig = {
   maxOffsetZ: 0.08,   // 8cm depth push-pull
   deadZone: 0.015,    // subtle deadzone, feels immediate and responsive
   smoothing: 0.88,    // smooth temporal filtering without lag
-  sensitivity: 0.85,  // natural 1:1 physical window feel
+  // End-to-end gain on the camera travel. 1.0 = 1:1 physical window feel.
+  // The UI slider drives this live (0.1x – 4.0x).
+  sensitivity: 0.85,
   processIntervalMs: 20, // 50fps processing rate
   invertMovement: true,  // inverted horizontal movement
   invertY: true,         // inverted vertical movement as requested

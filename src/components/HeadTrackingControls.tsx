@@ -182,8 +182,8 @@ export function HeadTrackingControls({
           <input
             id="ht-sensitivity"
             type="range"
-            min={0.2}
-            max={2.0}
+            min={0.1}
+            max={4.0}
             step={0.05}
             value={sensitivity}
             onChange={(e) => onSensitivityChange(Number(e.target.value))}
