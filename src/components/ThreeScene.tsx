@@ -16,6 +16,7 @@ import { Suspense, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, Html, BakeShadows } from '@react-three/drei';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 import {
   ROUTE_CONFIG,
@@ -44,6 +45,27 @@ const _tempMatrix = new THREE.Matrix4();
 const _baseLookAtQuat = new THREE.Quaternion();
 const _worldUp = new THREE.Vector3(0, 1, 0);
 
+// ─── Studio Environment for PBR Reflections ─────────────────────────────────
+
+function StudioEnvironment() {
+  const { gl, scene } = useThree();
+
+  useEffect(() => {
+    const pmremGenerator = new THREE.PMREMGenerator(gl);
+    pmremGenerator.compileEquirectangularShader();
+    const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTexture;
+
+    return () => {
+      scene.environment = null;
+      envTexture.dispose();
+      pmremGenerator.dispose();
+    };
+  }, [gl, scene]);
+
+  return null;
+}
+
 // ─── Model component ─────────────────────────────────────────────────────────
 
 interface ModelProps {
@@ -63,11 +85,20 @@ function Model({ onReady, onError }: ModelProps) {
         if (obj instanceof THREE.Mesh) {
           obj.castShadow = true;
           obj.receiveShadow = true;
-          // Fix color space for PBR materials
+          // Enhance PBR metallic materials (Iron Man armor, cars, chrome wheels)
           if (obj.material instanceof THREE.MeshStandardMaterial) {
             if (obj.material.map) {
               obj.material.map.colorSpace = THREE.SRGBColorSpace;
             }
+            if (obj.material.emissiveMap) {
+              obj.material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+            }
+            // Balanced metallic environment reflections
+            obj.material.envMapIntensity = 1.35;
+            if (obj.material.roughness < 0.12) {
+              obj.material.roughness = 0.16;
+            }
+            obj.material.needsUpdate = true;
           }
         }
       });
@@ -107,7 +138,29 @@ function CameraController({
   waypointsRef,
   prefersReducedMotion,
 }: CameraControllerProps) {
-  const { camera, size } = useThree();
+  const { camera, scene } = useThree();
+  const fillLightRef = useRef<THREE.SpotLight>(null);
+  const broadLightRef = useRef<THREE.PointLight>(null);
+
+  useEffect(() => {
+    // Tight POV spotlight aimed straight down the camera's optical axis
+    const light = new THREE.SpotLight(0xfff3e0, 6.0, 0, Math.PI / 2.5, 0.5, 1.2);
+    light.target = new THREE.Object3D();
+    scene.add(light);
+    scene.add(light.target);
+    fillLightRef.current = light;
+
+    // Broader omni fill sitting at the camera position for full POV coverage
+    const broad = new THREE.PointLight(0xffe9cf, 4.0, 0, 1.4);
+    scene.add(broad);
+    broadLightRef.current = broad;
+
+    return () => {
+      scene.remove(light);
+      scene.remove(light.target);
+      scene.remove(broad);
+    };
+  }, [scene]);
 
   useFrame((_, delta) => {
     // Clamp delta to prevent huge leaps if frame dropped or tab inactive
@@ -169,6 +222,18 @@ function CameraController({
     // Position the camera shifted around the focal baseline
     _finalPos.copy(_basePos).add(_headOffset);
     camera.position.copy(_finalPos);
+
+    // Anchor POV lights at the Blender Empty, aimed down its optical axis
+    if (fillLightRef.current) {
+      fillLightRef.current.position.copy(_basePos);
+      fillLightRef.current.target.position
+        .copy(_basePos)
+        .addScaledVector(_forward, FOCAL_DISTANCE);
+      fillLightRef.current.target.updateMatrixWorld();
+    }
+    if (broadLightRef.current) {
+      broadLightRef.current.position.copy(_basePos);
+    }
 
     // Parallax Depth Anchor: Always focus directly on the center of what is being seen
     // Objects at _focalPoint stay anchored, while foreground and background shift in opposite directions
@@ -305,6 +370,52 @@ interface SceneGraphProps {
   onJumpTo: (index: number) => void;
 }
 
+// ─── Targeted Spotlight Helper ──────────────────────────────────────────────
+
+function TargetedSpotLight({
+  position,
+  target,
+  intensity,
+  angle = 0.65,
+  penumbra = 0.85,
+  color = '#ffffff',
+  castShadow = false,
+}: {
+  position: [number, number, number];
+  target: [number, number, number];
+  intensity: number;
+  angle?: number;
+  penumbra?: number;
+  color?: string;
+  castShadow?: boolean;
+}) {
+  const lightRef = useRef<THREE.SpotLight>(null);
+  const targetRef = useRef<THREE.Object3D>(null);
+
+  useEffect(() => {
+    if (lightRef.current && targetRef.current) {
+      lightRef.current.target = targetRef.current;
+    }
+  }, []);
+
+  return (
+    <>
+      <object3D ref={targetRef} position={target} />
+      <spotLight
+        ref={lightRef}
+        position={position}
+        intensity={intensity}
+        angle={angle}
+        penumbra={penumbra}
+        color={color}
+        castShadow={castShadow}
+        shadow-bias={-0.0002}
+        shadow-mapSize={[1024, 1024]}
+      />
+    </>
+  );
+}
+
 function SceneGraph({
   progressRef,
   headOffsetRef,
@@ -337,10 +448,69 @@ function SceneGraph({
 
   return (
     <>
-      {/* Lighting */}
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[3, 5, 3]} intensity={1.2} castShadow />
-      <directionalLight position={[-3, 2, -3]} intensity={0.4} />
+      {/* PBR Studio Environment: delivers rich, realistic reflections on metals without overexposing walls */}
+      <StudioEnvironment />
+
+      {/* ── Cinematic Studio & Showroom Lighting ────────────────────────────── */}
+
+      {/* 1. Hero Key Spotlight: Warm focused beam directly on Iron Man with soft contact shadow */}
+      <TargetedSpotLight
+        position={[1.5, 3.6, 3.2]}
+        target={[-0.46, 1.2, 1.12]}
+        intensity={3.4}
+        angle={0.65}
+        penumbra={0.85}
+        color="#fff7ed"
+        castShadow
+      />
+
+      {/* 2. Showroom Automotive Spotlight: Crisp daylight overhead beam across the RAM & Porsche */}
+      <TargetedSpotLight
+        position={[0.8, 4.0, 2.2]}
+        target={[0.6, 0.7, 0.8]}
+        intensity={3.0}
+        angle={0.75}
+        penumbra={0.9}
+        color="#f8fafc"
+        castShadow
+      />
+
+      {/* 3. Gym & Wheel Rack Accent Spotlight: Subtle fill on the shield and chrome rims */}
+      <TargetedSpotLight
+        position={[-1.6, 3.2, 2.6]}
+        target={[-1.4, 1.1, 0.9]}
+        intensity={2.0}
+        angle={0.6}
+        penumbra={0.9}
+        color="#f1f5f9"
+      />
+
+      {/* 4. Warm Overhead Garage Panel: soft overhead glow above the bay */}
+      <pointLight
+        position={[-0.4, 3.2, 1.1]}
+        intensity={2.2}
+        distance={9}
+        decay={2}
+        color="#ffedd5"
+      />
+
+      {/* 5. Rim / Silhouette Kicker: Cool neon cyan kicker defining shoulders and car rooflines */}
+      <directionalLight
+        position={[-3.2, 3.8, -1.2]}
+        intensity={1.6}
+        color="#38bdf8"
+      />
+
+      {/* 6. Soft Front Fill: gentle frontal illumination so shadows stay transparent, not pitch black */}
+      <directionalLight
+        position={[0.8, 1.8, 3.0]}
+        intensity={1.1}
+        color="#e2e8f0"
+      />
+
+      {/* 7. Moody Cinematic Ambient & Hemisphere: preserves dark rich shadows and concrete texture */}
+      <ambientLight intensity={0.4} color="#334155" />
+      <hemisphereLight args={['#e2e8f0', '#0f172a', 0.65]} />
 
       {/* Environment model */}
       <Suspense fallback={null}>
@@ -424,6 +594,7 @@ export function ThreeScene({
 
   return (
     <Canvas
+      shadows
       camera={{
         fov: ROUTE_CONFIG.fov,
         near: ROUTE_CONFIG.near,
@@ -433,7 +604,7 @@ export function ThreeScene({
       gl={{
         antialias: true,
         toneMapping: THREE.ACESFilmicToneMapping,
-        toneMappingExposure: 1.0,
+        toneMappingExposure: 1.05,
         outputColorSpace: THREE.SRGBColorSpace,
       }}
       dpr={Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2)}

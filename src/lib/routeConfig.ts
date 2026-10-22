@@ -21,7 +21,7 @@ import type { RouteConfig, HeadTrackingConfig } from '@/types/waypoint';
 export const ROUTE_CONFIG: RouteConfig = {
   mode: 'waypoint',
   diagnosticEnabled: false,
-  fov: 60,
+  fov: 45,
   near: 0.01,
   far: 2000,
 
