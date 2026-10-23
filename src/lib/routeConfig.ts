@@ -62,9 +62,9 @@ export const HEAD_TRACKING_CONFIG: HeadTrackingConfig = {
   invertY: true,         // inverted vertical movement as requested
 };
 
-/** Public URL for the GLB model served from Next.js public directory */
-export const MODEL_URL = '/models/3d.glb';
-export const HERO_MODEL_URL = '/models/hero2.glb';
+/** Public URL for the optimized GLB models served from Next.js public directory */
+export const MODEL_URL = '/models/garage-v2.glb';
+export const HERO_MODEL_URL = '/models/hero2-v2.glb';
 
 /** Section count derived from waypoints */
 export const SECTION_COUNT = ROUTE_CONFIG.waypoints.length;

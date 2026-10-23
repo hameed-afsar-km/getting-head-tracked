@@ -51,8 +51,6 @@ export interface HeadTrackingApi {
   recenter: () => void;
 }
 
-const NEUTRAL_LANDMARK_Y = 0.5;
-const NEUTRAL_LANDMARK_X = 0.5;
 const NOSE_TIP_INDEX = 1;
 const LEFT_EYE_INDEX = 33;
 const RIGHT_EYE_INDEX = 263;
@@ -85,6 +83,7 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
   const smoothedRef = useRef<HeadOffset>({ x: 0, y: 0, z: 0 });
   const lastProcessTimeRef = useRef<number>(0);
   const enabledRef = useRef<boolean>(false);
+  const processingLoopRef = useRef<(() => void) | null>(null);
 
   // Live config + status mirrors. The render loop is created once inside
   // `enable()`, so it must read these refs instead of the closure values —
@@ -124,6 +123,7 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
     }
+    processingLoopRef.current = null;
   }, []);
 
   const disable = useCallback(() => {
@@ -357,6 +357,7 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
       rafRef.current = requestAnimationFrame(processFrame);
     };
 
+    processingLoopRef.current = processFrame;
     rafRef.current = requestAnimationFrame(processFrame);
   }, [stopWebcam]);
 
@@ -377,12 +378,9 @@ export function useHeadTracking(config: HeadTrackingConfig): HeadTrackingApi {
           rafRef.current = 0;
         }
       } else if (!document.hidden && enabledRef.current && landmarkerRef.current) {
-        // Resume
-        const processFrame = () => {
-          if (!enabledRef.current) return;
-          rafRef.current = requestAnimationFrame(processFrame);
-        };
-        rafRef.current = requestAnimationFrame(processFrame);
+        // Resume the original processing loop (not a no-op replacement).
+        const loop = processingLoopRef.current;
+        if (loop) rafRef.current = requestAnimationFrame(loop);
       }
     };
 

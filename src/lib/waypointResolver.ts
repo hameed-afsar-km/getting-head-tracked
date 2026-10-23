@@ -159,9 +159,6 @@ export function computeCameraPoseFromScroll(
   const clamped = Math.max(0, Math.min(1, scrollT));
 
   // Find the segment
-  let segStart = 0;
-  let segEnd = 1;
-
   for (let i = 0; i < waypoints.length - 1; i++) {
     const tA = waypoints[i].scrollT;
     const tB = waypoints[i + 1].scrollT;
@@ -171,9 +168,6 @@ export function computeCameraPoseFromScroll(
       interpolateWaypoints(waypoints[i], waypoints[i + 1], segT, outPos, outQuat);
       return;
     }
-
-    segStart = i;
-    segEnd = i + 1;
   }
 
   // Clamp to last waypoint

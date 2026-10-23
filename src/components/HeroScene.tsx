@@ -6,7 +6,7 @@
 
 'use client';
 
-import { Suspense, useEffect, useRef } from 'react';
+import { Suspense, memo, useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
@@ -25,6 +25,7 @@ const _dampedMouse = new THREE.Vector2();
 const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _forward = new THREE.Vector3();
+const _noop = () => {};
 
 // Camera positioned with generous space above helmet
 // Iron Man model center: [7.878, 1.80, -0.868]
@@ -34,6 +35,13 @@ const _forward = new THREE.Vector3();
 const HERO_CAM_POS = new THREE.Vector3(10.48, 2.12, -0.872);
 const HERO_FOCAL = new THREE.Vector3(7.878, 1.76, -0.868);
 
+function setSceneEnvironment(
+  scene: THREE.Scene,
+  texture: THREE.Texture | null
+) {
+  scene.environment = texture;
+}
+
 function StudioEnvironment() {
   const { gl, scene } = useThree();
 
@@ -41,10 +49,10 @@ function StudioEnvironment() {
     const pmrem = new THREE.PMREMGenerator(gl);
     pmrem.compileEquirectangularShader();
     const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = envTex;
+    setSceneEnvironment(scene, envTex);
 
     return () => {
-      scene.environment = null;
+      setSceneEnvironment(scene, null);
       envTex.dispose();
       pmrem.dispose();
     };
@@ -55,12 +63,11 @@ function StudioEnvironment() {
 
 function HeroModel({
   onReady,
-  isScanning,
 }: {
   onReady: (g: THREE.Group) => void;
-  isScanning?: boolean;
 }) {
   const { scene } = useGLTF(HERO_MODEL_URL) as { scene: THREE.Group };
+  const groupRef = useRef<THREE.Group>(null);
   const notified = useRef(false);
   const materialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
 
@@ -89,14 +96,18 @@ function HeroModel({
   // Subtle breathing animation on suit group
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
-    if (scene) {
+    if (groupRef.current) {
       // Very gentle organic breathing expansion
       const breath = Math.sin(t * 1.8) * 0.003;
-      scene.position.y = breath;
+      groupRef.current.position.y = breath;
     }
   });
 
-  return <primitive object={scene} />;
+  return (
+    <group ref={groupRef}>
+      <primitive object={scene} />
+    </group>
+  );
 }
 
 // ─── Pulsing Arc Reactor Light ───────────────────────────────────────────────
@@ -148,7 +159,6 @@ interface CameraControllerProps {
   headActiveRef: React.RefObject<boolean>;
   mousePosRef: React.RefObject<{ x: number; y: number }>;
   prefersReducedMotion: boolean;
-  isScanning?: boolean;
 }
 
 function HeroCameraController({
@@ -156,7 +166,6 @@ function HeroCameraController({
   headActiveRef,
   mousePosRef,
   prefersReducedMotion,
-  isScanning,
 }: CameraControllerProps) {
   const { camera } = useThree();
 
@@ -239,17 +248,24 @@ export interface HeroSceneProps {
   mousePosRef: React.RefObject<{ x: number; y: number }>;
   prefersReducedMotion: boolean;
   isScanning?: boolean;
+  /** When false the render loop is paused (e.g. section scrolled offscreen). */
+  active?: boolean;
+  /** Called once the GLB is loaded and ready to render. */
+  onReady?: () => void;
 }
 
-export function HeroScene({
+export const HeroScene = memo(function HeroScene({
   headOffsetRef,
   headActiveRef,
   mousePosRef,
   prefersReducedMotion,
   isScanning = false,
+  active = true,
+  onReady,
 }: HeroSceneProps) {
   return (
     <Canvas
+      frameloop={active ? 'always' : 'never'}
       camera={{
         fov: 42,
         near: 0.01,
@@ -257,13 +273,13 @@ export function HeroScene({
         position: [10.48, 2.12, -0.872],
       }}
       gl={{
-        antialias: true,
+        antialias: false,
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: 1.35,
         outputColorSpace: THREE.SRGBColorSpace,
         powerPreference: 'high-performance',
       }}
-      dpr={[1, 1.5]}
+      dpr={[1, 1.25]}
       shadows={false}
       style={{ position: 'absolute', inset: 0 }}
     >
@@ -288,7 +304,7 @@ export function HeroScene({
       <pointLight position={[7.4, 2.3, -1.6]} intensity={1.8} color="#c8a84b" distance={4} decay={2} />
 
       <Suspense fallback={null}>
-        <HeroModel onReady={() => {}} isScanning={isScanning} />
+        <HeroModel onReady={onReady ?? _noop} />
       </Suspense>
 
       <HeroCameraController
@@ -296,10 +312,9 @@ export function HeroScene({
         headActiveRef={headActiveRef}
         mousePosRef={mousePosRef}
         prefersReducedMotion={prefersReducedMotion}
-        isScanning={isScanning}
       />
     </Canvas>
   );
-}
+});
 
 useGLTF.preload(HERO_MODEL_URL);

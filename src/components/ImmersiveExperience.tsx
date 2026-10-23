@@ -12,13 +12,13 @@
 
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, memo, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { useHeadTracking } from '@/hooks/useHeadTracking';
+import { useInView } from '@/hooks/useInView';
 import { HEAD_TRACKING_CONFIG } from '@/lib/routeConfig';
-import type { ResolvedWaypoint } from '@/types/waypoint';
 
 // Lazy-load 3D scenes — only rendered when in view
 const HeroScene = dynamic(
@@ -30,17 +30,21 @@ const ThreeScene = dynamic(
   { ssr: false }
 );
 
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+function subscribeReducedMotion(onChange: () => void) {
+  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
+  mq.addEventListener('change', onChange);
+  return () => mq.removeEventListener('change', onChange);
+}
+
+function getReducedMotionSnapshot() {
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
 // ─── Navbar ──────────────────────────────────────────────────────────────────
 
-function Navbar({ onScrollTo }: { onScrollTo: (id: string) => void }) {
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 60);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
+const Navbar = memo(function Navbar({ onScrollTo }: { onScrollTo: (id: string) => void }) {
   return (
     <nav
       style={{
@@ -52,15 +56,14 @@ function Navbar({ onScrollTo }: { onScrollTo: (id: string) => void }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 40px',
-        height: 64,
-        background: scrolled
-          ? 'rgba(4, 4, 6, 0.92)'
-          : 'linear-gradient(to bottom, rgba(4,4,6,0.75) 0%, transparent 100%)',
-        backdropFilter: scrolled ? 'blur(14px)' : 'none',
-        WebkitBackdropFilter: scrolled ? 'blur(14px)' : 'none',
-        borderBottom: scrolled ? '1px solid rgba(204,0,0,0.25)' : '1px solid transparent',
-        transition: 'background 0.4s ease, backdrop-filter 0.4s ease, border-color 0.4s ease',
+        padding: '0 48px',
+        height: 76,
+        background: 'linear-gradient(90deg, rgba(0,0,0,0.98) 0%, rgba(30,0,0,0.98) 50%, rgba(0,0,0,0.98) 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderBottom: '2px solid rgba(255,0,0,0.6)',
+        boxShadow: '0 10px 60px rgba(255,0,0,0.3), inset 0 -1px 0 rgba(255,0,0,0.4)',
+        transition: 'all 0.4s ease',
       }}
     >
       {/* Logo */}
@@ -77,30 +80,30 @@ function Navbar({ onScrollTo }: { onScrollTo: (id: string) => void }) {
         }}
       >
         {/* Arc reactor icon */}
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-          <circle cx="14" cy="14" r="12" stroke="rgba(204,0,0,0.6)" strokeWidth="1.5" />
-          <circle cx="14" cy="14" r="7" stroke="rgba(200,168,75,0.7)" strokeWidth="1.2" />
-          <circle cx="14" cy="14" r="3" fill="#cc0000" />
-          <circle cx="14" cy="14" r="3" fill="#cc0000" style={{ filter: 'drop-shadow(0 0 4px #ff0000)' }} />
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <path d="M18 3 L31 10 L31 26 L18 33 L5 26 L5 10 Z" stroke="#ff0000" strokeWidth="2" fill="none" />
+          <path d="M18 3 L31 10 L18 18 L5 10 Z" stroke="#ff0000" strokeWidth="1.5" fill="rgba(255,0,0,0.1)" />
+          <circle cx="18" cy="18" r="4" fill="#ff0000" style={{ filter: 'drop-shadow(0 0 10px #ff0000)' }} />
         </svg>
         <span style={{
-          fontFamily: "'Orbitron', monospace",
-          fontSize: 14,
-          fontWeight: 700,
-          letterSpacing: '0.12em',
-          color: '#f1f5f9',
+          fontFamily: "'Tourney', 'Impact', sans-serif",
+          fontSize: 16,
+          fontWeight: 900,
+          letterSpacing: '0.22em',
+          color: '#ff0000',
           textTransform: 'uppercase',
+          textShadow: '0 0 30px rgba(255,0,0,0.7)',
         }}>
           IRON MAN
         </span>
       </button>
 
       {/* Nav links */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 36 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
         {[
-          { id: 'hero', label: 'SUIT' },
-          { id: 'stats', label: 'SPECS' },
-          { id: 'garage', label: 'GARAGE' },
+          { id: 'hero', label: 'ARMOR' },
+          { id: 'stats', label: 'SPECIFICATIONS' },
+          { id: 'garage', label: 'HANGAR' },
         ].map(({ id, label }) => (
           <button
             key={id}
@@ -109,59 +112,65 @@ function Navbar({ onScrollTo }: { onScrollTo: (id: string) => void }) {
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: '6px 0',
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: 13,
-              fontWeight: 600,
-              letterSpacing: '0.14em',
-              color: 'rgba(241,245,249,0.7)',
+              padding: '10px 0',
+              fontFamily: "'Tourney', sans-serif",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.25em',
+              color: 'rgba(255,255,255,0.8)',
               textTransform: 'uppercase',
               position: 'relative',
-              transition: 'color 0.2s',
+              transition: 'all 0.3s',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color = '#cc0000';
+              const btn = e.currentTarget as HTMLButtonElement;
+              btn.style.color = '#ff0000';
+              btn.style.textShadow = '0 0 15px rgba(255,0,0,0.8)';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color = 'rgba(241,245,249,0.7)';
+              const btn = e.currentTarget as HTMLButtonElement;
+              btn.style.color = 'rgba(255,255,255,0.8)';
+              btn.style.textShadow = 'none';
             }}
           >
             {label}
           </button>
         ))}
 
-        {/* CTA */}
         <button
           onClick={() => onScrollTo('garage')}
           style={{
-            padding: '8px 20px',
-            background: 'transparent',
-            border: '1px solid rgba(204,0,0,0.7)',
-            color: '#cc0000',
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: 12,
-            fontWeight: 700,
-            letterSpacing: '0.12em',
+            padding: '10px 28px',
+            background: 'linear-gradient(135deg, #ff0000 0%, #8b0000 100%)',
+            border: '1px solid #ff0000',
+            color: '#fff',
+            fontFamily: "'Tourney', sans-serif",
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: '0.2em',
             textTransform: 'uppercase',
             cursor: 'pointer',
-            borderRadius: 2,
-            transition: 'all 0.2s',
+            clipPath: 'polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)',
+            transition: 'all 0.3s',
+            boxShadow: '0 0 30px rgba(255,0,0,0.4)',
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(204,0,0,0.15)';
-            (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 16px rgba(204,0,0,0.3)';
+            const btn = e.currentTarget as HTMLButtonElement;
+            btn.style.boxShadow = '0 0 50px rgba(255,0,0,0.7)';
+            btn.style.transform = 'scale(1.05)';
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-            (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
+            const btn = e.currentTarget as HTMLButtonElement;
+            btn.style.boxShadow = '0 0 30px rgba(255,0,0,0.4)';
+            btn.style.transform = 'scale(1)';
           }}
         >
-          EXPLORE
+          ENGAGE
         </button>
       </div>
     </nav>
   );
-}
+});
 
 // ─── HUD stat card ────────────────────────────────────────────────────────────
 
@@ -217,7 +226,7 @@ function StatCard({ label, value, unit, icon, color = '#cc0000' }: {
 
       <div style={{ fontSize: 24, marginBottom: 12 }}>{icon}</div>
       <div style={{
-        fontFamily: "'Orbitron', monospace",
+        fontFamily: "var(--font-orbitron), monospace",
         fontSize: 32,
         fontWeight: 700,
         color: '#f1f5f9',
@@ -228,7 +237,7 @@ function StatCard({ label, value, unit, icon, color = '#cc0000' }: {
         {unit && <span style={{ fontSize: 14, fontWeight: 400, color: 'rgba(241,245,249,0.5)', marginLeft: 4 }}>{unit}</span>}
       </div>
       <div style={{
-        fontFamily: "'Rajdhani', sans-serif",
+        fontFamily: "var(--font-rajdhani), sans-serif",
         fontSize: 11,
         fontWeight: 600,
         letterSpacing: '0.18em',
@@ -245,21 +254,29 @@ function StatCard({ label, value, unit, icon, color = '#cc0000' }: {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ImmersiveExperience() {
-  const [splashLoaded, setSplashLoaded] = useState(false);
   const [splashOut, setSplashOut] = useState(false);
-  const [heroMounted, setHeroMounted] = useState(false);   // canvas exists (loads in bg)
   const [heroRevealed, setHeroRevealed] = useState(false); // canvas is visible
-  const [garageVisible, setGarageVisible] = useState(false);
+  const [heroReady, setHeroReady] = useState(false);       // hero GLB fully loaded
+  const [splashMinTimePassed, setSplashMinTimePassed] = useState(false);
+  const [splashForced, setSplashForced] = useState(false);
 
-  const [resolvedWaypoints, setResolvedWaypoints] = useState<ResolvedWaypoint[]>([]);
   const [sensitivity, setSensitivity] = useState(HEAD_TRACKING_CONFIG.sensitivity);
   const [headEnabled, setHeadEnabled] = useState(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const prefersReducedMotion = useSyncExternalStore(
+    subscribeReducedMotion,
+    getReducedMotionSnapshot,
+    () => false
+  );
 
   const headActiveRef = useRef<boolean>(false);
-  const jumpToWaypointRef = useRef<((index: number) => void) | null>(null);
-  const progressRef = useRef<number>(0);
+  const noMousePosRef = useRef({ x: 0, y: 0 });
+
+  const heroRef = useRef<HTMLElement>(null);
+  const [heroInView] = useInView(heroRef);
   const garageRef = useRef<HTMLDivElement>(null);
+  const [garageInView, garageHasBeenInView] = useInView(garageRef, {
+    rootMargin: '200px',
+  });
 
   const headTracking = useHeadTracking({
     ...HEAD_TRACKING_CONFIG,
@@ -273,37 +290,40 @@ export function ImmersiveExperience() {
     headActiveRef.current = headTracking.state.isActive && headEnabled;
   }, [headTracking.state.isActive, headEnabled]);
 
-  // Reduced motion
+  // Mount timer starts immediately so the model pre-loads behind the splash.
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  // Splash timer — mount canvas immediately so model pre-loads in background
-  useEffect(() => {
-    setHeroMounted(true);
-    const t = setTimeout(() => setSplashLoaded(true), 1800);
+    const t = setTimeout(() => setSplashMinTimePassed(true), 600);
     return () => clearTimeout(t);
   }, []);
+
+  // Never trap the user behind a stalled or failed model fetch.
+  useEffect(() => {
+    const t = setTimeout(() => setSplashForced(true), 15000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const splashLoaded = splashForced || (heroReady && splashMinTimePassed);
+
+  const handleHeroReady = useCallback(() => setHeroReady(true), []);
+
+  // Prefetch the garage model + chunk while the browser is idle after the hero loads.
+  useEffect(() => {
+    if (!heroReady) return;
+    const prefetch = () => {
+      void import('@/components/ThreeScene');
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(prefetch, { timeout: 5000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(prefetch, 3000);
+    return () => window.clearTimeout(id);
+  }, [heroReady]);
 
   const handleSplashOutComplete = useCallback(() => {
     setSplashOut(true);
     setHeroRevealed(true);
   }, []);
-
-  // Lazy-load garage scene when scrolled into view
-  useEffect(() => {
-    if (!garageRef.current) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setGarageVisible(true); },
-      { threshold: 0.1 }
-    );
-    observer.observe(garageRef.current);
-    return () => observer.disconnect();
-  }, [splashOut]);
 
   const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
@@ -319,10 +339,6 @@ export function ImmersiveExperience() {
       setHeadEnabled(true);
     }
   }, [headTracking]);
-
-  const handleWaypointsResolved = useCallback((wp: ResolvedWaypoint[]) => {
-    setResolvedWaypoints(wp);
-  }, []);
 
   const isTracking = headTracking.state.isActive && headEnabled;
 
@@ -341,6 +357,7 @@ export function ImmersiveExperience() {
       ════════════════════════════════════════════════════════ */}
       <section
         id="hero"
+        ref={heroRef}
         style={{
           position: 'relative',
           width: '100%',
@@ -355,15 +372,15 @@ export function ImmersiveExperience() {
           opacity: heroRevealed ? 1 : 0,
           transition: 'opacity 1.4s ease',
         }}>
-          {heroMounted && (
-            <HeroScene
-              headOffsetRef={headTracking.offsetRef}
-              headActiveRef={headActiveRef}
-              mousePosRef={{ current: { x: 0, y: 0 } } as any}
-              prefersReducedMotion={prefersReducedMotion}
-              isScanning={false}
-            />
-          )}
+          <HeroScene
+            headOffsetRef={headTracking.offsetRef}
+            headActiveRef={headActiveRef}
+            mousePosRef={noMousePosRef}
+            prefersReducedMotion={prefersReducedMotion}
+            isScanning={false}
+            active={heroInView || !splashOut}
+            onReady={handleHeroReady}
+          />
         </div>
 
         {/* Vignette */}
@@ -380,60 +397,96 @@ export function ImmersiveExperience() {
           pointerEvents: 'none',
         }} />
 
-        {/* Hero text overlay */}
+        {/* Hero text overlay - 3 column layout, center column clear */}
         <div style={{
           position: 'absolute', inset: 0,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'flex-start', justifyContent: 'center',
-          padding: '0 60px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
           pointerEvents: 'none',
         }}>
           <div style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: 13,
-            fontWeight: 600,
-            letterSpacing: '0.25em',
-            color: '#cc0000',
-            textTransform: 'uppercase',
-            marginBottom: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            padding: '0 8%',
             opacity: heroRevealed ? 1 : 0,
-            transform: heroRevealed ? 'translateY(0)' : 'translateY(20px)',
-            transition: 'opacity 1s ease 0.6s, transform 1s ease 0.6s',
+            transform: heroRevealed ? 'translateX(0)' : 'translateX(-30px)',
+            transition: 'opacity 1.3s ease 0.6s, transform 1.3s ease 0.6s',
           }}>
-            STARK INDUSTRIES // MARK L
-          </div>
-          <h1 style={{
-            fontFamily: "'Orbitron', monospace",
-            fontSize: 'clamp(48px, 7vw, 96px)',
+            <div style={{
+              fontFamily: "var(--font-rajdhani), sans-serif",
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: '0.4em',
+              color: '#ff0000',
+              textTransform: 'uppercase',
+              marginBottom: 18,
+              textShadow: '0 0 40px rgba(255,0,0,0.7)',
+            }}>
+              STARK INDUSTRIES
+            </div>
+          <div style={{
+            fontFamily: "'Tourney', 'Impact', 'Arial Black', sans-serif",
+            fontSize: 'clamp(70px, 10vw, 140px)',
             fontWeight: 900,
-            lineHeight: 1.0,
-            margin: 0,
-            color: '#f1f5f9',
-            letterSpacing: '-0.02em',
-            opacity: heroRevealed ? 1 : 0,
-            transform: heroRevealed ? 'translateY(0)' : 'translateY(30px)',
-            transition: 'opacity 1s ease 0.8s, transform 1s ease 0.8s',
+            lineHeight: 0.8,
+            letterSpacing: '0.15em',
+            color: '#ff0000',
+            textTransform: 'uppercase',
+            textShadow: '0 0 80px rgba(255,0,0,0.6), 20px 20px 60px rgba(0,0,0,0.9)',
+            WebkitTextStroke: '2px rgba(255,255,255,0.1)',
           }}>
-            IRON<br />
-            <span style={{
-              background: 'linear-gradient(135deg, #cc0000, #ff3333 40%, #c8a84b)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>MAN</span>
-          </h1>
-          <p style={{
-            fontFamily: "'Inter', sans-serif",
-            fontSize: 15,
-            color: 'rgba(241,245,249,0.55)',
-            marginTop: 20,
-            maxWidth: 320,
-            lineHeight: 1.6,
+            IRON
+          </div>
+            <div style={{
+              fontFamily: "var(--font-orbitron), monospace",
+              fontSize: 13,
+              color: 'rgba(255,255,255,0.7)',
+              marginTop: 14,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              fontWeight: 600,
+            }}>
+              MARK L
+            </div>
+          </div>
+          <div />
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+            textAlign: 'right',
+            padding: '0 8%',
             opacity: heroRevealed ? 1 : 0,
-            transition: 'opacity 1s ease 1.1s',
+            transform: heroRevealed ? 'translateX(0)' : 'translateX(30px)',
+            transition: 'opacity 1.3s ease 0.7s, transform 1.3s ease 0.7s',
           }}>
-            The suit. The legend. Move your head to look around in real-time.
-          </p>
+            <div style={{
+              fontFamily: "'Tourney', 'Impact', 'Arial Black', sans-serif",
+              fontSize: 'clamp(70px, 10vw, 140px)',
+              fontWeight: 900,
+              lineHeight: 0.8,
+              letterSpacing: '0.15em',
+              color: '#ff0000',
+              textTransform: 'uppercase',
+              textShadow: '0 0 80px rgba(255,0,0,0.6), -20px 20px 60px rgba(0,0,0,0.9)',
+              WebkitTextStroke: '2px rgba(255,255,255,0.1)',
+            }}>
+              MAN
+            </div>
+            <div style={{
+              fontFamily: "var(--font-orbitron), monospace",
+              fontSize: 13,
+              color: 'rgba(255,255,255,0.7)',
+              marginTop: 14,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              fontWeight: 600,
+            }}>
+              ARC REACTOR
+            </div>
+          </div>
         </div>
 
         {/* Head tracking button — bottom center */}
@@ -459,7 +512,7 @@ export function ImmersiveExperience() {
                 border: `1px solid ${isTracking ? 'rgba(204,0,0,0.6)' : 'rgba(255,255,255,0.15)'}`,
                 borderRadius: 2,
                 cursor: 'pointer',
-                fontFamily: "'Rajdhani', sans-serif",
+                fontFamily: "var(--font-rajdhani), sans-serif",
                 fontSize: 13,
                 fontWeight: 600,
                 letterSpacing: '0.14em',
@@ -479,18 +532,18 @@ export function ImmersiveExperience() {
                 borderRadius: 2,
                 border: '1px solid rgba(204,0,0,0.15)',
               }}>
-                <span style={{ fontFamily: "'Rajdhani'", fontSize: 11, color: 'rgba(241,245,249,0.5)', letterSpacing: '0.1em' }}>SENSITIVITY</span>
+                <span style={{ fontFamily: "var(--font-rajdhani)", fontSize: 11, color: 'rgba(241,245,249,0.5)', letterSpacing: '0.1em' }}>SENSITIVITY</span>
                 <input
                   type="range" min={0.1} max={4.0} step={0.05}
                   value={sensitivity}
                   onChange={(e) => setSensitivity(Number(e.target.value))}
                   style={{ accentColor: '#cc0000', width: 90, cursor: 'pointer' }}
                 />
-                <span style={{ fontFamily: "'Orbitron'", fontSize: 10, color: '#cc0000' }}>{sensitivity.toFixed(1)}x</span>
+                <span style={{ fontFamily: "var(--font-orbitron)", fontSize: 10, color: '#cc0000' }}>{sensitivity.toFixed(1)}x</span>
               </div>
             )}
             <div style={{
-              fontFamily: "'Rajdhani', sans-serif",
+              fontFamily: "var(--font-rajdhani), sans-serif",
               fontSize: 11,
               letterSpacing: '0.12em',
               color: 'rgba(241,245,249,0.3)',
@@ -510,8 +563,9 @@ export function ImmersiveExperience() {
         style={{
           position: 'relative',
           width: '100%',
-          padding: '100px 60px',
-          background: 'linear-gradient(to bottom, #000 0%, #06060a 100%)',
+          minHeight: '100vh',
+          padding: '140px 60px 100px',
+          background: 'radial-gradient(ellipse at center, #0a0000 0%, #000000 70%)',
           overflow: 'hidden',
         }}
       >
@@ -519,8 +573,8 @@ export function ImmersiveExperience() {
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage:
-            'linear-gradient(rgba(204,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(204,0,0,0.04) 1px, transparent 1px)',
-          backgroundSize: '60px 60px',
+            'linear-gradient(rgba(255,0,0,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,0,0,0.06) 1px, transparent 1px)',
+          backgroundSize: '80px 80px',
           pointerEvents: 'none',
         }} />
 
@@ -536,23 +590,27 @@ export function ImmersiveExperience() {
         <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto' }}>
           {/* Section label */}
           <div style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: '0.3em',
-            color: '#cc0000',
+            fontFamily: "'Tourney', sans-serif",
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: '0.5em',
+            color: '#ff0000',
             textTransform: 'uppercase',
-            marginBottom: 16,
+            marginBottom: 18,
+            textShadow: '0 0 30px rgba(255,0,0,0.6)',
           }}>
-            ─── SUIT SPECIFICATIONS
+            ◆ SUIT SPECIFICATIONS ◆
           </div>
           <h2 style={{
-            fontFamily: "'Orbitron', monospace",
-            fontSize: 'clamp(28px, 4vw, 52px)',
-            fontWeight: 700,
-            color: '#f1f5f9',
-            margin: '0 0 60px',
-            letterSpacing: '0.03em',
+            fontFamily: "'Tourney', 'Impact', sans-serif",
+            fontSize: 'clamp(36px, 6vw, 72px)',
+            fontWeight: 900,
+            color: 'transparent',
+            WebkitTextStroke: '2px #ff0000',
+            margin: '0 0 70px',
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            textShadow: '0 0 60px rgba(255,0,0,0.4)',
           }}>
             MARK L DIAGNOSTICS
           </h2>
@@ -580,7 +638,7 @@ export function ImmersiveExperience() {
             background: 'rgba(204,0,0,0.05)',
           }}>
             <p style={{
-              fontFamily: "'Rajdhani', sans-serif",
+              fontFamily: "var(--font-rajdhani), sans-serif",
               fontSize: 22,
               fontStyle: 'italic',
               color: 'rgba(241,245,249,0.7)',
@@ -590,7 +648,7 @@ export function ImmersiveExperience() {
               &ldquo;The suit and I are one.&rdquo;
             </p>
             <div style={{
-              fontFamily: "'Orbitron', monospace",
+              fontFamily: "var(--font-orbitron), monospace",
               fontSize: 11,
               color: '#cc0000',
               marginTop: 12,
@@ -618,15 +676,12 @@ export function ImmersiveExperience() {
       >
         {/* 3D canvas */}
         <div style={{ position: 'absolute', inset: 0 }}>
-          {garageVisible && (
+          {garageHasBeenInView && (
             <ThreeScene
-              progressRef={progressRef}
               headOffsetRef={headTracking.offsetRef}
               headActiveRef={headActiveRef}
-              onWaypointsResolved={handleWaypointsResolved}
-              resolvedWaypoints={resolvedWaypoints}
               prefersReducedMotion={prefersReducedMotion}
-              jumpToWaypointRef={jumpToWaypointRef}
+              active={garageInView}
             />
           )}
         </div>
@@ -653,7 +708,7 @@ export function ImmersiveExperience() {
           pointerEvents: 'none',
         }}>
           <div style={{
-            fontFamily: "'Rajdhani', sans-serif",
+            fontFamily: "var(--font-rajdhani), sans-serif",
             fontSize: 12,
             fontWeight: 600,
             letterSpacing: '0.28em',
@@ -664,7 +719,7 @@ export function ImmersiveExperience() {
             ─── MALIBU COMPOUND
           </div>
           <h2 style={{
-            fontFamily: "'Orbitron', monospace",
+            fontFamily: "var(--font-orbitron), monospace",
             fontSize: 'clamp(24px, 3.5vw, 48px)',
             fontWeight: 700,
             color: '#f1f5f9',
@@ -697,7 +752,7 @@ export function ImmersiveExperience() {
               border: `1px solid ${isTracking ? 'rgba(204,0,0,0.6)' : 'rgba(255,255,255,0.15)'}`,
               borderRadius: 2,
               cursor: 'pointer',
-              fontFamily: "'Rajdhani', sans-serif",
+              fontFamily: "var(--font-rajdhani), sans-serif",
               fontSize: 12,
               fontWeight: 600,
               letterSpacing: '0.14em',
@@ -715,14 +770,14 @@ export function ImmersiveExperience() {
               background: 'rgba(4,4,6,0.7)', padding: '5px 12px',
               borderRadius: 2, border: '1px solid rgba(204,0,0,0.15)',
             }}>
-              <span style={{ fontFamily: "'Rajdhani'", fontSize: 11, color: 'rgba(241,245,249,0.5)', letterSpacing: '0.1em' }}>SENSITIVITY</span>
+              <span style={{ fontFamily: "var(--font-rajdhani)", fontSize: 11, color: 'rgba(241,245,249,0.5)', letterSpacing: '0.1em' }}>SENSITIVITY</span>
               <input
                 type="range" min={0.1} max={4.0} step={0.05}
                 value={sensitivity}
                 onChange={(e) => setSensitivity(Number(e.target.value))}
                 style={{ accentColor: '#cc0000', width: 90, cursor: 'pointer' }}
               />
-              <span style={{ fontFamily: "'Orbitron'", fontSize: 10, color: '#cc0000' }}>{sensitivity.toFixed(1)}x</span>
+              <span style={{ fontFamily: "var(--font-orbitron)", fontSize: 10, color: '#cc0000' }}>{sensitivity.toFixed(1)}x</span>
             </div>
           )}
         </div>
@@ -757,7 +812,7 @@ export function ImmersiveExperience() {
           </div>
 
           <div style={{
-            fontFamily: "'Orbitron', monospace",
+            fontFamily: "var(--font-orbitron), monospace",
             fontSize: 22,
             fontWeight: 700,
             letterSpacing: '0.25em',
@@ -767,7 +822,7 @@ export function ImmersiveExperience() {
             STARK INDUSTRIES
           </div>
           <div style={{
-            fontFamily: "'Rajdhani', sans-serif",
+            fontFamily: "var(--font-rajdhani), sans-serif",
             fontSize: 12,
             letterSpacing: '0.2em',
             color: '#cc0000',
@@ -777,7 +832,7 @@ export function ImmersiveExperience() {
           </div>
 
           <p style={{
-            fontFamily: "'Inter', sans-serif",
+            fontFamily: "var(--font-inter), sans-serif",
             fontSize: 13,
             color: 'rgba(241,245,249,0.3)',
             maxWidth: 480,
@@ -790,7 +845,7 @@ export function ImmersiveExperience() {
 
           <div style={{
             marginTop: 48,
-            fontFamily: "'Rajdhani', sans-serif",
+            fontFamily: "var(--font-rajdhani), sans-serif",
             fontSize: 11,
             letterSpacing: '0.15em',
             color: 'rgba(241,245,249,0.2)',

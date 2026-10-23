@@ -12,9 +12,9 @@
 
 'use client';
 
-import { Suspense, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Suspense, memo, useEffect, useRef, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useGLTF, Html, BakeShadows } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
@@ -25,7 +25,7 @@ import {
   FOCAL_TARGET,
   FOCAL_DISTANCE,
 } from '@/lib/routeConfig';
-import { resolveWaypoints, computeCameraPoseFromScroll } from '@/lib/waypointResolver';
+import { resolveWaypoints } from '@/lib/waypointResolver';
 import type { ResolvedWaypoint } from '@/types/waypoint';
 import type { HeadOffset } from '@/hooks/useHeadTracking';
 
@@ -34,12 +34,10 @@ const _basePos = new THREE.Vector3();
 const _baseQuat = new THREE.Quaternion();
 const _headOffset = new THREE.Vector3();
 const _finalPos = new THREE.Vector3();
-const _finalQuat = new THREE.Quaternion();
 const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _dampedOffset = new THREE.Vector3();
-const _currentShift = new THREE.Vector2();
 const _focalPoint = new THREE.Vector3(...FOCAL_TARGET);
 const _tempMatrix = new THREE.Matrix4();
 const _baseLookAtQuat = new THREE.Quaternion();
@@ -47,17 +45,25 @@ const _worldUp = new THREE.Vector3(0, 1, 0);
 
 // ─── Studio Environment for PBR Reflections ─────────────────────────────────
 
+function setSceneEnvironment(
+  scene: THREE.Scene,
+  texture: THREE.Texture | null
+) {
+  scene.environment = texture;
+}
+
 function StudioEnvironment() {
   const { gl, scene } = useThree();
 
   useEffect(() => {
     const pmremGenerator = new THREE.PMREMGenerator(gl);
-    pmremGenerator.compileEquirectangularShader();
-    const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = envTexture;
+    const envTexture = pmremGenerator
+      .fromScene(new RoomEnvironment(), 0.04)
+      .texture;
+    setSceneEnvironment(scene, envTexture);
 
     return () => {
-      scene.environment = null;
+      setSceneEnvironment(scene, null);
       envTexture.dispose();
       pmremGenerator.dispose();
     };
@@ -114,7 +120,6 @@ function Model({ onReady, onError }: ModelProps) {
 // ─── Camera controller ───────────────────────────────────────────────────────
 
 interface CameraControllerProps {
-  progressRef?: React.RefObject<number>;
   headOffsetRef: React.RefObject<HeadOffset>;
   headActiveRef: React.RefObject<boolean>;
   waypointsRef: React.RefObject<ResolvedWaypoint[]>;
@@ -248,124 +253,15 @@ function CameraController({
   return null;
 }
 
-// ─── Diagnostic panel ────────────────────────────────────────────────────────
-
-interface DiagnosticOverlayProps {
-  waypoints: ResolvedWaypoint[];
-  progressRef: React.RefObject<number>;
-  headOffsetRef: React.RefObject<HeadOffset>;
-  onJumpTo: (index: number) => void;
-}
-
-function DiagnosticOverlay({
-  waypoints,
-  progressRef,
-  headOffsetRef,
-  onJumpTo,
-}: DiagnosticOverlayProps) {
-  const { camera } = useThree();
-
-  return (
-    <Html
-      style={{ position: 'fixed', top: 8, right: 8, pointerEvents: 'none' }}
-      fullscreen
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          background: 'rgba(0,0,0,0.75)',
-          color: '#00ff88',
-          fontFamily: 'monospace',
-          fontSize: 10,
-          padding: '8px 10px',
-          borderRadius: 6,
-          width: 260,
-          maxHeight: '70vh',
-          overflowY: 'auto',
-          pointerEvents: 'all',
-          border: '1px solid rgba(0,255,136,0.3)',
-        }}
-      >
-        <div style={{ marginBottom: 4, fontWeight: 'bold', color: '#88ffcc' }}>
-          🔧 WAYPOINT DIAGNOSTIC
-        </div>
-        <div style={{ color: '#aaa' }}>
-          Scroll: {((progressRef.current ?? 0) * 100).toFixed(1)}%
-        </div>
-        <div style={{ color: '#aaa' }}>
-          Cam:{' '}
-          {[camera.position.x, camera.position.y, camera.position.z]
-            .map((v) => v.toFixed(3))
-            .join(', ')}
-        </div>
-        <div style={{ color: '#aaa', marginBottom: 6 }}>
-          Head:{' '}
-          {headOffsetRef.current
-            ? [
-                headOffsetRef.current.x,
-                headOffsetRef.current.y,
-                headOffsetRef.current.z,
-              ]
-                .map((v) => v.toFixed(2))
-                .join(', ')
-            : '0, 0, 0'}
-        </div>
-        <div style={{ marginBottom: 4, color: '#88ffcc' }}>Waypoints:</div>
-        {waypoints.map((wp, i) => (
-          <div key={i} style={{ marginBottom: 4 }}>
-            <div style={{ color: wp.fromBlender ? '#00ff88' : '#88aaff' }}>
-              [{i}] {wp.label} {wp.fromBlender ? '✦' : '◆'}
-              {!wp.found && (
-                <span style={{ color: '#ff6666' }}> ✗</span>
-              )}
-            </div>
-            <div style={{ color: '#777', fontSize: 9 }}>
-              pos: [{wp.worldPosition.map((v) => v.toFixed(2)).join(', ')}]
-            </div>
-            <div style={{ color: '#777', fontSize: 9 }}>
-              rot: [{wp.worldQuaternion.map((v) => v.toFixed(2)).join(', ')}]
-            </div>
-            {wp.error && (
-              <div style={{ color: '#ff8888', fontSize: 9 }}>{wp.error}</div>
-            )}
-            <button
-              onClick={() => onJumpTo(i)}
-              style={{
-                marginTop: 2,
-                padding: '1px 6px',
-                background: '#00ff8822',
-                color: '#00ff88',
-                border: '1px solid #00ff8844',
-                borderRadius: 3,
-                cursor: 'pointer',
-                fontSize: 9,
-                pointerEvents: 'all',
-              }}
-            >
-              Jump
-            </button>
-          </div>
-        ))}
-      </div>
-    </Html>
-  );
-}
 
 // ─── Scene graph ─────────────────────────────────────────────────────────────
 
 interface SceneGraphProps {
-  progressRef: React.RefObject<number>;
   headOffsetRef: React.RefObject<HeadOffset>;
   headActiveRef: React.RefObject<boolean>;
   waypointsRef: React.RefObject<ResolvedWaypoint[]>;
-  onWaypointsResolved: (wp: ResolvedWaypoint[]) => void;
   onLoadError: (err: string) => void;
-  resolvedWaypoints: ResolvedWaypoint[];
   prefersReducedMotion: boolean;
-  showDiagnostic: boolean;
-  onJumpTo: (index: number) => void;
 }
 
 // ─── Targeted Spotlight Helper ──────────────────────────────────────────────
@@ -377,7 +273,6 @@ function TargetedSpotLight({
   angle = 0.65,
   penumbra = 0.85,
   color = '#ffffff',
-  castShadow = false,
 }: {
   position: [number, number, number];
   target: [number, number, number];
@@ -385,7 +280,6 @@ function TargetedSpotLight({
   angle?: number;
   penumbra?: number;
   color?: string;
-  castShadow?: boolean;
 }) {
   const lightRef = useRef<THREE.SpotLight>(null);
   const targetRef = useRef<THREE.Object3D>(null);
@@ -407,41 +301,24 @@ function TargetedSpotLight({
         penumbra={penumbra}
         color={color}
         castShadow={false}
-        shadow-bias={-0.0002}
-        shadow-mapSize={[512, 512]}
       />
     </>
   );
 }
 
 function SceneGraph({
-  progressRef,
   headOffsetRef,
   headActiveRef,
   waypointsRef,
-  onWaypointsResolved,
   onLoadError,
-  resolvedWaypoints,
   prefersReducedMotion,
-  showDiagnostic,
-  onJumpTo,
 }: SceneGraphProps) {
-  const activeWaypointIndex = useMemo(() => {
-    const t = progressRef.current ?? 0;
-    let best = 0;
-    resolvedWaypoints.forEach((wp, i) => {
-      if (wp.scrollT <= t) best = i;
-    });
-    return best;
-  }, [progressRef, resolvedWaypoints]);
-
   const handleModelReady = useCallback(
     (scene: THREE.Group) => {
       const resolved = resolveWaypoints(scene, ROUTE_CONFIG.waypoints);
       waypointsRef.current = resolved;
-      onWaypointsResolved(resolved);
     },
-    [waypointsRef, onWaypointsResolved]
+    [waypointsRef]
   );
 
   return (
@@ -459,7 +336,6 @@ function SceneGraph({
         angle={0.65}
         penumbra={0.85}
         color="#fff7ed"
-        castShadow
       />
 
       {/* 2. Showroom Automotive Spotlight: Crisp daylight overhead beam across the RAM & Porsche */}
@@ -470,7 +346,6 @@ function SceneGraph({
         angle={0.75}
         penumbra={0.9}
         color="#f8fafc"
-        castShadow
       />
 
       {/* 3. Gym & Wheel Rack Accent Spotlight: Subtle fill on the shield and chrome rims */}
@@ -517,22 +392,11 @@ function SceneGraph({
 
       {/* Camera driver */}
       <CameraController
-        progressRef={progressRef}
         headOffsetRef={headOffsetRef}
         headActiveRef={headActiveRef}
         waypointsRef={waypointsRef}
         prefersReducedMotion={prefersReducedMotion}
       />
-
-      {/* Diagnostic panel */}
-      {showDiagnostic && resolvedWaypoints.length > 0 && (
-        <DiagnosticOverlay
-          waypoints={resolvedWaypoints}
-          progressRef={progressRef}
-          headOffsetRef={headOffsetRef}
-          onJumpTo={onJumpTo}
-        />
-      )}
     </>
   );
 }
@@ -540,59 +404,27 @@ function SceneGraph({
 // ─── Public exports ──────────────────────────────────────────────────────────
 
 export interface ThreeSceneProps {
-  progressRef: React.RefObject<number>;
   headOffsetRef: React.RefObject<HeadOffset>;
   headActiveRef: React.RefObject<boolean>;
-  onWaypointsResolved: (wp: ResolvedWaypoint[]) => void;
-  resolvedWaypoints: ResolvedWaypoint[];
   prefersReducedMotion: boolean;
-  jumpToWaypointRef: React.RefObject<((index: number) => void) | null>;
+  active?: boolean;
 }
 
-export function ThreeScene({
-  progressRef,
+export const ThreeScene = memo(function ThreeScene({
   headOffsetRef,
   headActiveRef,
-  onWaypointsResolved,
-  resolvedWaypoints,
   prefersReducedMotion,
-  jumpToWaypointRef,
+  active = true,
 }: ThreeSceneProps) {
   const waypointsRef = useRef<ResolvedWaypoint[]>([]);
-  const resolvedRef = useRef(resolvedWaypoints);
-  resolvedRef.current = resolvedWaypoints;
 
   const handleLoadError = useCallback((err: string) => {
     console.error('[ThreeScene] Model load error:', err);
   }, []);
 
-  const handleJumpTo = useCallback(
-    (index: number) => {
-      const wps = waypointsRef.current;
-      if (index >= 0 && index < wps.length) {
-        progressRef.current = wps[index].scrollT;
-        // Scroll window to match
-        const el = document.getElementById('scroll-container');
-        if (el) {
-          const maxScroll = el.scrollHeight - el.clientHeight;
-          el.scrollTop = wps[index].scrollT * maxScroll;
-        }
-      }
-    },
-    [progressRef]
-  );
-
-  // Expose jump function to parent
-  useEffect(() => {
-    jumpToWaypointRef.current = handleJumpTo;
-  }, [jumpToWaypointRef, handleJumpTo]);
-
-  const showDiagnostic =
-    ROUTE_CONFIG.diagnosticEnabled && process.env.NODE_ENV === 'development';
-
   return (
     <Canvas
-      shadows
+      frameloop={active ? 'always' : 'never'}
       camera={{
         fov: ROUTE_CONFIG.fov,
         near: ROUTE_CONFIG.near,
@@ -606,24 +438,19 @@ export function ThreeScene({
         outputColorSpace: THREE.SRGBColorSpace,
         powerPreference: 'high-performance',
       }}
-      dpr={[1, 1.5]}
+      dpr={[1, 1.25]}
       style={{ position: 'absolute', inset: 0 }}
     >
       <SceneGraph
-        progressRef={progressRef}
         headOffsetRef={headOffsetRef}
         headActiveRef={headActiveRef}
         waypointsRef={waypointsRef}
-        onWaypointsResolved={onWaypointsResolved}
         onLoadError={handleLoadError}
-        resolvedWaypoints={resolvedWaypoints}
         prefersReducedMotion={prefersReducedMotion}
-        showDiagnostic={showDiagnostic}
-        onJumpTo={handleJumpTo}
       />
     </Canvas>
   );
-}
+});
 
-// Preload GLB
+// Preload GLB when this module is evaluated (hero-ready idle prefetch)
 useGLTF.preload(MODEL_URL);

@@ -85,7 +85,7 @@ export function ScrollContent({ resolvedWaypoints }: ScrollContentProps) {
                   textTransform: 'uppercase',
                   color: '#63b3ed',
                   marginBottom: 8,
-                  fontFamily: "'Inter', system-ui, sans-serif",
+                  fontFamily: "var(--font-inter), system-ui, sans-serif",
                 }}
               >
                 {content.eyebrow}
@@ -105,7 +105,7 @@ export function ScrollContent({ resolvedWaypoints }: ScrollContentProps) {
                   fontWeight: 700,
                   lineHeight: 1.2,
                   color: '#f7fafc',
-                  fontFamily: "'Inter', system-ui, sans-serif",
+                  fontFamily: "var(--font-inter), system-ui, sans-serif",
                 }}
               >
                 {content.heading}
@@ -116,7 +116,7 @@ export function ScrollContent({ resolvedWaypoints }: ScrollContentProps) {
                   fontSize: 14,
                   lineHeight: 1.65,
                   color: 'rgba(255,255,255,0.65)',
-                  fontFamily: "'Inter', system-ui, sans-serif",
+                  fontFamily: "var(--font-inter), system-ui, sans-serif",
                 }}
               >
                 {content.body}
