@@ -279,7 +279,7 @@ export const HeroScene = memo(function HeroScene({
         outputColorSpace: THREE.SRGBColorSpace,
         powerPreference: 'high-performance',
       }}
-      dpr={[1, 1.25]}
+      dpr={1}
       shadows={false}
       style={{ position: 'absolute', inset: 0 }}
     >

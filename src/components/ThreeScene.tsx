@@ -82,6 +82,7 @@ interface ModelProps {
 function Model({ onReady, onError }: ModelProps) {
   const { scene } = useGLTF(MODEL_URL) as { scene: THREE.Group };
   const notifiedRef = useRef(false);
+  const invalidate = useThree((state) => state.invalidate);
 
   useEffect(() => {
     if (scene && !notifiedRef.current) {
@@ -107,8 +108,9 @@ function Model({ onReady, onError }: ModelProps) {
         }
       });
       onReady(scene);
+      invalidate();
     }
-  }, [scene, onReady, onError]);
+  }, [scene, onReady, onError, invalidate]);
 
   return <primitive object={scene} />;
 }
@@ -438,7 +440,7 @@ export const ThreeScene = memo(function ThreeScene({
         outputColorSpace: THREE.SRGBColorSpace,
         powerPreference: 'high-performance',
       }}
-      dpr={[1, 1.25]}
+      dpr={1}
       style={{ position: 'absolute', inset: 0 }}
     >
       <SceneGraph

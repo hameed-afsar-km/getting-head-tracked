@@ -1,18 +1,14 @@
-/**
- * ImmersiveExperience — Iron Man themed website
- *
- * Structure:
- *  1. LoadingScreen   — splash with red spinner
- *  2. Navbar          — fixed, semi-transparent Iron Man HUD
- *  3. HeroSection     — hero2.glb fullscreen + head tracking CTA
- *  4. StatsSection    — Iron Man HUD stats cards (CSS only, zero GPU)
- *  5. GarageSection   — 3d.glb scene + head tracking
- *  6. FooterSection   — Iron Man quote + links
- */
-
 'use client';
 
-import { useState, useRef, useCallback, useEffect, memo, useSyncExternalStore } from 'react';
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  memo,
+  useSyncExternalStore,
+} from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import dynamic from 'next/dynamic';
 
 import { LoadingScreen } from '@/components/LoadingScreen';
@@ -20,11 +16,11 @@ import { useHeadTracking } from '@/hooks/useHeadTracking';
 import { useInView } from '@/hooks/useInView';
 import { HEAD_TRACKING_CONFIG } from '@/lib/routeConfig';
 
-// Lazy-load 3D scenes — only rendered when in view
 const HeroScene = dynamic(
   () => import('@/components/HeroScene').then((m) => ({ default: m.HeroScene })),
   { ssr: false }
 );
+
 const ThreeScene = dynamic(
   () => import('@/components/ThreeScene').then((m) => ({ default: m.ThreeScene })),
   { ssr: false }
@@ -42,240 +38,255 @@ function getReducedMotionSnapshot() {
   return window.matchMedia(REDUCED_MOTION_QUERY).matches;
 }
 
-// ─── Navbar ──────────────────────────────────────────────────────────────────
+const NAV_ITEMS = [
+  { id: 'hero', label: 'Armor', index: '01' },
+  { id: 'stats', label: 'Specifications', index: '02' },
+  { id: 'garage', label: 'Hangar', index: '03' },
+];
 
-const Navbar = memo(function Navbar({ onScrollTo }: { onScrollTo: (id: string) => void }) {
+const SPECS = [
+  {
+    name: 'Max Flight Speed',
+    sub: 'Repulsor thrust · supersonic',
+    value: 'Mach 3',
+    unit: '',
+  },
+  {
+    name: 'Titanium-Gold Alloy',
+    sub: 'Nano-lattice plating',
+    value: '12',
+    unit: 'mm',
+  },
+  {
+    name: 'AI Targeting Latency',
+    sub: 'J.A.R.V.I.S. optical loop',
+    value: '0.3',
+    unit: 'ms',
+  },
+  {
+    name: 'Neural Threads',
+    sub: 'Parallel decision engines',
+    value: '4096',
+    unit: '',
+  },
+  {
+    name: 'Temperature Tolerance',
+    sub: 'Re-entry survivability',
+    value: '3000',
+    unit: '°C',
+  },
+  {
+    name: 'Repulsor Yield',
+    sub: 'Per-palm output',
+    value: '2.4',
+    unit: 'GJ',
+  },
+];
+
+function ReactorMark({ size = 36 }: { size?: number }) {
   return (
-    <nav
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 48px',
-        height: 76,
-        background: 'linear-gradient(90deg, rgba(0,0,0,0.98) 0%, rgba(30,0,0,0.98) 50%, rgba(0,0,0,0.98) 100%)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderBottom: '2px solid rgba(255,0,0,0.6)',
-        boxShadow: '0 10px 60px rgba(255,0,0,0.3), inset 0 -1px 0 rgba(255,0,0,0.4)',
-        transition: 'all 0.4s ease',
-      }}
+    <svg
+      className="brand-mark"
+      width={size}
+      height={size}
+      viewBox="0 0 36 36"
+      fill="none"
+      aria-hidden="true"
     >
-      {/* Logo */}
-      <button
-        onClick={() => onScrollTo('hero')}
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: 0,
-        }}
-      >
-        {/* Arc reactor icon */}
-        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-          <path d="M18 3 L31 10 L31 26 L18 33 L5 26 L5 10 Z" stroke="#ff0000" strokeWidth="2" fill="none" />
-          <path d="M18 3 L31 10 L18 18 L5 10 Z" stroke="#ff0000" strokeWidth="1.5" fill="rgba(255,0,0,0.1)" />
-          <circle cx="18" cy="18" r="4" fill="#ff0000" style={{ filter: 'drop-shadow(0 0 10px #ff0000)' }} />
-        </svg>
-        <span style={{
-          fontFamily: "'Tourney', 'Impact', sans-serif",
-          fontSize: 16,
-          fontWeight: 900,
-          letterSpacing: '0.22em',
-          color: '#ff0000',
-          textTransform: 'uppercase',
-          textShadow: '0 0 30px rgba(255,0,0,0.7)',
-        }}>
-          IRON MAN
-        </span>
-      </button>
+      <path
+        d="M18 2.5 31.5 10v16L18 33.5 4.5 26V10Z"
+        stroke="rgba(201,164,92,0.65)"
+        strokeWidth="1"
+      />
+      <circle cx="18" cy="18" r="9.5" stroke="rgba(255,59,68,0.55)" strokeWidth="0.8" />
+      <circle cx="18" cy="18" r="5.5" stroke="rgba(236,232,223,0.35)" strokeWidth="0.8" />
+      <circle cx="18" cy="18" r="2.6" fill="#ff3b44" />
+    </svg>
+  );
+}
 
-      {/* Nav links */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
-        {[
-          { id: 'hero', label: 'ARMOR' },
-          { id: 'stats', label: 'SPECIFICATIONS' },
-          { id: 'garage', label: 'HANGAR' },
-        ].map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => onScrollTo(id)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '10px 0',
-              fontFamily: "'Tourney', sans-serif",
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.25em',
-              color: 'rgba(255,255,255,0.8)',
-              textTransform: 'uppercase',
-              position: 'relative',
-              transition: 'all 0.3s',
-            }}
-            onMouseEnter={(e) => {
-              const btn = e.currentTarget as HTMLButtonElement;
-              btn.style.color = '#ff0000';
-              btn.style.textShadow = '0 0 15px rgba(255,0,0,0.8)';
-            }}
-            onMouseLeave={(e) => {
-              const btn = e.currentTarget as HTMLButtonElement;
-              btn.style.color = 'rgba(255,255,255,0.8)';
-              btn.style.textShadow = 'none';
-            }}
-          >
-            {label}
-          </button>
-        ))}
+const Navbar = memo(function Navbar({
+  onScrollTo,
+}: {
+  onScrollTo: (id: string) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
 
-        <button
-          onClick={() => onScrollTo('garage')}
-          style={{
-            padding: '10px 28px',
-            background: 'linear-gradient(135deg, #ff0000 0%, #8b0000 100%)',
-            border: '1px solid #ff0000',
-            color: '#fff',
-            fontFamily: "'Tourney', sans-serif",
-            fontSize: 10,
-            fontWeight: 800,
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            clipPath: 'polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)',
-            transition: 'all 0.3s',
-            boxShadow: '0 0 30px rgba(255,0,0,0.4)',
-          }}
-          onMouseEnter={(e) => {
-            const btn = e.currentTarget as HTMLButtonElement;
-            btn.style.boxShadow = '0 0 50px rgba(255,0,0,0.7)';
-            btn.style.transform = 'scale(1.05)';
-          }}
-          onMouseLeave={(e) => {
-            const btn = e.currentTarget as HTMLButtonElement;
-            btn.style.boxShadow = '0 0 30px rgba(255,0,0,0.4)';
-            btn.style.transform = 'scale(1)';
-          }}
-        >
-          ENGAGE
+  useEffect(() => {
+    document.body.classList.toggle('menu-open', menuOpen);
+    return () => document.body.classList.remove('menu-open');
+  }, [menuOpen]);
+
+  const navigate = (id: string) => {
+    setMenuOpen(false);
+    onScrollTo(id);
+  };
+
+  return (
+    <>
+      <nav className="nav">
+        <button className="brand" onClick={() => navigate('hero')} aria-label="Stark Industries home">
+          <ReactorMark />
+          <span className="brand-text">
+            <span className="brand-name">Stark</span>
+            <span className="brand-sub">Industries</span>
+          </span>
         </button>
-      </div>
-    </nav>
+
+        <div className="nav-links">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              className="nav-link"
+              onClick={() => navigate(item.id)}
+            >
+              <span>{item.index}</span>
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="nav-actions">
+          <button className="btn-primary" onClick={() => navigate('garage')}>
+            Enter Hangar
+          </button>
+          <button
+            className={`nav-burger ${menuOpen ? 'is-open' : ''}`}
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-menu"
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        </div>
+      </nav>
+
+      {menuOpen && (
+        <div className="mobile-menu" id="mobile-menu">
+          <div className="mobile-links">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                className="mobile-link"
+                onClick={() => navigate(item.id)}
+              >
+                <span>{item.index}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <button className="btn-primary" onClick={() => navigate('garage')}>
+            Enter Hangar
+          </button>
+        </div>
+      )}
+    </>
   );
 });
 
-// ─── HUD stat card ────────────────────────────────────────────────────────────
-
-function StatCard({ label, value, unit, icon, color = '#cc0000' }: {
-  label: string;
-  value: string;
-  unit?: string;
-  icon: string;
-  color?: string;
+function TrackingControl({
+  isTracking,
+  onToggle,
+  sensitivity,
+  onSensitivityChange,
+}: {
+  isTracking: boolean;
+  onToggle: () => void;
+  sensitivity: number;
+  onSensitivityChange: (value: number) => void;
 }) {
   return (
-    <div
-      style={{
-        position: 'relative',
-        padding: '28px 32px',
-        background: 'rgba(6,6,10,0.85)',
-        border: '1px solid rgba(204,0,0,0.2)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderRadius: 4,
-        overflow: 'hidden',
-        flex: '1 1 220px',
-        minWidth: 200,
-        maxWidth: 300,
-        transition: 'transform 0.3s, border-color 0.3s',
-        cursor: 'default',
-      }}
-      onMouseEnter={(e) => {
-        const el = e.currentTarget as HTMLDivElement;
-        el.style.transform = 'translateY(-4px)';
-        el.style.borderColor = `rgba(${color === '#c8a84b' ? '200,168,75' : '204,0,0'},0.5)`;
-      }}
-      onMouseLeave={(e) => {
-        const el = e.currentTarget as HTMLDivElement;
-        el.style.transform = 'translateY(0)';
-        el.style.borderColor = 'rgba(204,0,0,0.2)';
-      }}
-    >
-      {/* Corner brackets */}
-      <div style={{ position: 'absolute', top: 8, left: 8, width: 12, height: 12, borderTop: `1px solid ${color}`, borderLeft: `1px solid ${color}` }} />
-      <div style={{ position: 'absolute', top: 8, right: 8, width: 12, height: 12, borderTop: `1px solid ${color}`, borderRight: `1px solid ${color}` }} />
-      <div style={{ position: 'absolute', bottom: 8, left: 8, width: 12, height: 12, borderBottom: `1px solid ${color}`, borderLeft: `1px solid ${color}` }} />
-      <div style={{ position: 'absolute', bottom: 8, right: 8, width: 12, height: 12, borderBottom: `1px solid ${color}`, borderRight: `1px solid ${color}` }} />
+    <div className={`track-control ${isTracking ? 'is-on' : ''}`}>
+      <button
+        className="track-btn"
+        onClick={onToggle}
+        aria-pressed={isTracking}
+      >
+        <span className="track-dot" aria-hidden="true" />
+        {isTracking ? 'Tracking Active' : 'Enable Head Tracking'}
+      </button>
 
-      {/* Glow stripe */}
-      <div style={{
-        position: 'absolute',
-        top: 0, left: 0, right: 0,
-        height: 2,
-        background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
-        opacity: 0.7,
-      }} />
-
-      <div style={{ fontSize: 24, marginBottom: 12 }}>{icon}</div>
-      <div style={{
-        fontFamily: "var(--font-orbitron), monospace",
-        fontSize: 32,
-        fontWeight: 700,
-        color: '#f1f5f9',
-        lineHeight: 1,
-        marginBottom: 4,
-      }}>
-        {value}
-        {unit && <span style={{ fontSize: 14, fontWeight: 400, color: 'rgba(241,245,249,0.5)', marginLeft: 4 }}>{unit}</span>}
-      </div>
-      <div style={{
-        fontFamily: "var(--font-rajdhani), sans-serif",
-        fontSize: 11,
-        fontWeight: 600,
-        letterSpacing: '0.18em',
-        color: 'rgba(241,245,249,0.45)',
-        textTransform: 'uppercase',
-        marginTop: 6,
-      }}>
-        {label}
-      </div>
+      {isTracking && (
+        <div className="track-sens">
+          <span className="track-sens-label">Sens</span>
+          <input
+            type="range"
+            min={0.1}
+            max={4.0}
+            step={0.05}
+            value={sensitivity}
+            onChange={(event) => onSensitivityChange(Number(event.target.value))}
+            aria-label="Head tracking sensitivity"
+          />
+          <span className="track-sens-value">{sensitivity.toFixed(1)}x</span>
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+function SpecificationRow({
+  index,
+  name,
+  sub,
+  value,
+  unit,
+}: {
+  index: number;
+  name: string;
+  sub: string;
+  value: string;
+  unit: string;
+}) {
+  return (
+    <article className="spec-row">
+      <span className="spec-row-index">{String(index).padStart(2, '0')}</span>
+      <div>
+        <h3 className="spec-row-name">{name}</h3>
+        <p className="spec-row-sub">{sub}</p>
+      </div>
+      <span className="spec-row-value">
+        {value}
+        {unit && <span>{unit}</span>}
+      </span>
+    </article>
+  );
+}
 
 export function ImmersiveExperience() {
   const [splashOut, setSplashOut] = useState(false);
-  const [heroRevealed, setHeroRevealed] = useState(false); // canvas is visible
-  const [heroReady, setHeroReady] = useState(false);       // hero GLB fully loaded
+  const [heroRevealed, setHeroRevealed] = useState(false);
+  const [heroReady, setHeroReady] = useState(false);
   const [splashMinTimePassed, setSplashMinTimePassed] = useState(false);
   const [splashForced, setSplashForced] = useState(false);
 
   const [sensitivity, setSensitivity] = useState(HEAD_TRACKING_CONFIG.sensitivity);
   const [headEnabled, setHeadEnabled] = useState(false);
+
   const prefersReducedMotion = useSyncExternalStore(
     subscribeReducedMotion,
     getReducedMotionSnapshot,
     () => false
   );
 
-  const headActiveRef = useRef<boolean>(false);
-  const noMousePosRef = useRef({ x: 0, y: 0 });
+  const headActiveRef = useRef(false);
+  const mousePosRef = useRef({ x: 0, y: 0 });
 
   const heroRef = useRef<HTMLElement>(null);
   const [heroInView] = useInView(heroRef);
+
+  const statsRef = useRef<HTMLElement>(null);
+  const [statsInView] = useInView(statsRef, { threshold: 0.14 });
+  const featureValueRef = useRef<HTMLSpanElement>(null);
+  const progressFillRef = useRef<HTMLSpanElement>(null);
+
   const garageRef = useRef<HTMLDivElement>(null);
   const [garageInView, garageHasBeenInView] = useInView(garageRef, {
-    rootMargin: '200px',
+    rootMargin: '500px',
+    threshold: 0.12,
   });
 
   const headTracking = useHeadTracking({
@@ -285,40 +296,205 @@ export function ImmersiveExperience() {
     invertY: HEAD_TRACKING_CONFIG.invertY ?? true,
   });
 
-  // Sync active ref
   useEffect(() => {
     headActiveRef.current = headTracking.state.isActive && headEnabled;
   }, [headTracking.state.isActive, headEnabled]);
 
-  // Mount timer starts immediately so the model pre-loads behind the splash.
   useEffect(() => {
-    const t = setTimeout(() => setSplashMinTimePassed(true), 600);
-    return () => clearTimeout(t);
+    const onPointerMove = (event: PointerEvent) => {
+      mousePosRef.current = {
+        x: (event.clientX / window.innerWidth) * 2 - 1,
+        y: (event.clientY / window.innerHeight) * 2 - 1,
+      };
+    };
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onPointerMove);
   }, []);
 
-  // Never trap the user behind a stalled or failed model fetch.
   useEffect(() => {
-    const t = setTimeout(() => setSplashForced(true), 15000);
-    return () => clearTimeout(t);
+    if (prefersReducedMotion) return;
+    const section = statsRef.current;
+    if (!section) return;
+
+    let cancelled = false;
+    let revert: (() => void) | undefined;
+
+    const init = async () => {
+      const [{ gsap }, { ScrollTrigger }] = await Promise.all([
+        import('gsap'),
+        import('gsap/ScrollTrigger'),
+      ]);
+
+      if (cancelled) return;
+      gsap.registerPlugin(ScrollTrigger);
+
+      const context = gsap.context(() => {
+        const feature = section.querySelector<HTMLElement>('.spec-feature');
+        const list = section.querySelector<HTMLElement>('.spec-list');
+        const title = section.querySelector<HTMLElement>('.specs-title');
+        const rows = gsap.utils.toArray<HTMLElement>('.spec-row', section);
+
+        if (title) {
+          gsap.fromTo(
+            title,
+            { y: 58 },
+            {
+              y: -36,
+              ease: 'none',
+              scrollTrigger: {
+                trigger: section,
+                start: 'top bottom',
+                end: 'bottom top',
+                scrub: 1.1,
+              },
+            }
+          );
+        }
+
+        if (feature) {
+          gsap.fromTo(
+            '.reactor',
+            { scale: 0.68, rotation: -18 },
+            {
+              scale: 1,
+              rotation: 0,
+              ease: 'none',
+              scrollTrigger: {
+                trigger: feature,
+                start: 'top 92%',
+                end: 'center 48%',
+                scrub: 1,
+              },
+            }
+          );
+
+          gsap.fromTo(
+            '.spec-feature-body',
+            { y: 44, opacity: 0.25 },
+            {
+              y: 0,
+              opacity: 1,
+              ease: 'none',
+              scrollTrigger: {
+                trigger: feature,
+                start: 'top 90%',
+                end: 'center 52%',
+                scrub: 1,
+              },
+            }
+          );
+
+          const counter = { value: 0 };
+          gsap.to(counter, {
+            value: 3,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: feature,
+              start: 'top 88%',
+              end: 'center 52%',
+              scrub: 1,
+            },
+            onUpdate: () => {
+              if (featureValueRef.current) {
+                featureValueRef.current.textContent = counter.value.toFixed(1);
+              }
+            },
+          });
+        }
+
+        if (progressFillRef.current) {
+          gsap.fromTo(
+            progressFillRef.current,
+            { scaleY: 0 },
+            {
+              scaleY: 1,
+              ease: 'none',
+              scrollTrigger: {
+                trigger: section,
+                start: 'top 68%',
+                end: 'bottom 68%',
+                scrub: 1,
+              },
+            }
+          );
+        }
+
+        if (list && rows.length) {
+          gsap.from(rows, {
+            x: 46,
+            opacity: 0,
+            duration: 0.75,
+            stagger: 0.07,
+            ease: 'power3.out',
+            scrollTrigger: {
+              trigger: list,
+              start: 'top 84%',
+              toggleActions: 'play none none reverse',
+            },
+          });
+        }
+
+        rows.forEach((row) => {
+          ScrollTrigger.create({
+            trigger: row,
+            start: 'top 74%',
+            end: 'bottom 46%',
+            onToggle: (self) => row.classList.toggle('is-active', self.isActive),
+          });
+        });
+      }, section);
+
+      revert = () => context.revert();
+    };
+
+    void init();
+
+    return () => {
+      cancelled = true;
+      revert?.();
+    };
+  }, [prefersReducedMotion]);
+
+  const handleFeatureMove = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const el = event.currentTarget;
+      const rect = el.getBoundingClientRect();
+      const px = (event.clientX - rect.left) / rect.width;
+      const py = (event.clientY - rect.top) / rect.height;
+
+      el.style.setProperty('--mx', `${(px * 100).toFixed(2)}%`);
+      el.style.setProperty('--my', `${(py * 100).toFixed(2)}%`);
+
+      if (prefersReducedMotion) return;
+      const tilt = el.querySelector<HTMLElement>('.spec-feature-tilt');
+      if (tilt) {
+        tilt.style.transform = `rotateX(${((0.5 - py) * 7).toFixed(2)}deg) rotateY(${((px - 0.5) * 9).toFixed(2)}deg)`;
+      }
+    },
+    [prefersReducedMotion]
+  );
+
+  const handleFeatureLeave = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const tilt = event.currentTarget.querySelector<HTMLElement>('.spec-feature-tilt');
+      if (tilt) tilt.style.transform = '';
+    },
+    []
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSplashMinTimePassed(true), 600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSplashForced(true), 15000);
+    return () => clearTimeout(timer);
   }, []);
 
   const splashLoaded = splashForced || (heroReady && splashMinTimePassed);
 
   const handleHeroReady = useCallback(() => setHeroReady(true), []);
-
-  // Prefetch the garage model + chunk while the browser is idle after the hero loads.
-  useEffect(() => {
-    if (!heroReady) return;
-    const prefetch = () => {
-      void import('@/components/ThreeScene');
-    };
-    if (typeof window.requestIdleCallback === 'function') {
-      const id = window.requestIdleCallback(prefetch, { timeout: 5000 });
-      return () => window.cancelIdleCallback(id);
-    }
-    const id = window.setTimeout(prefetch, 3000);
-    return () => window.clearTimeout(id);
-  }, [heroReady]);
 
   const handleSplashOutComplete = useCallback(() => {
     setSplashOut(true);
@@ -344,38 +520,18 @@ export function ImmersiveExperience() {
 
   return (
     <>
-      {/* ── Splash ─────────────────────────────────────────────── */}
       {!splashOut && (
         <LoadingScreen isLoaded={splashLoaded} onOutComplete={handleSplashOutComplete} />
       )}
 
-      {/* ── Navbar ─────────────────────────────────────────────── */}
       {splashOut && <Navbar onScrollTo={scrollTo} />}
 
-      {/* ════════════════════════════════════════════════════════
-          SECTION 1 — HERO (hero2.glb)
-      ════════════════════════════════════════════════════════ */}
-      <section
-        id="hero"
-        ref={heroRef}
-        style={{
-          position: 'relative',
-          width: '100%',
-          height: '100vh',
-          overflow: 'hidden',
-          background: '#000',
-        }}
-      >
-        {/* 3D canvas — mounted during splash, revealed after */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          opacity: heroRevealed ? 1 : 0,
-          transition: 'opacity 1.4s ease',
-        }}>
+      <section id="hero" ref={heroRef} className="hero">
+        <div className={`hero-canvas ${heroRevealed ? 'is-revealed' : ''}`}>
           <HeroScene
             headOffsetRef={headTracking.offsetRef}
             headActiveRef={headActiveRef}
-            mousePosRef={noMousePosRef}
+            mousePosRef={mousePosRef}
             prefersReducedMotion={prefersReducedMotion}
             isScanning={false}
             active={heroInView || !splashOut}
@@ -383,299 +539,197 @@ export function ImmersiveExperience() {
           />
         </div>
 
-        {/* Vignette */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%)',
-          pointerEvents: 'none',
-        }} />
+        <div className="hero-vignette" />
+        <div className="hero-bottom-fade" />
 
-        {/* Bottom fade into next section */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: 180,
-          background: 'linear-gradient(to bottom, transparent, #000)',
-          pointerEvents: 'none',
-        }} />
+        <span className="hero-frame-corner tl" />
+        <span className="hero-frame-corner tr" />
+        <span className="hero-frame-corner bl" />
+        <span className="hero-frame-corner br" />
 
-        {/* Hero text overlay - 3 column layout, center column clear */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          pointerEvents: 'none',
-        }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            padding: '0 8%',
-            opacity: heroRevealed ? 1 : 0,
-            transform: heroRevealed ? 'translateX(0)' : 'translateX(-30px)',
-            transition: 'opacity 1.3s ease 0.6s, transform 1.3s ease 0.6s',
-          }}>
-            <div style={{
-              fontFamily: "var(--font-rajdhani), sans-serif",
-              fontSize: 12,
-              fontWeight: 800,
-              letterSpacing: '0.4em',
-              color: '#ff0000',
-              textTransform: 'uppercase',
-              marginBottom: 18,
-              textShadow: '0 0 40px rgba(255,0,0,0.7)',
-            }}>
-              STARK INDUSTRIES
+        <div className="hero-overlay">
+          <div className={`hero-meta ${heroRevealed ? 'is-revealed' : ''}`}>
+            <div>
+              <b>Stark Industries</b>
+              Advanced Systems Division
             </div>
-          <div style={{
-            fontFamily: "'Tourney', 'Impact', 'Arial Black', sans-serif",
-            fontSize: 'clamp(70px, 10vw, 140px)',
-            fontWeight: 900,
-            lineHeight: 0.8,
-            letterSpacing: '0.15em',
-            color: '#ff0000',
-            textTransform: 'uppercase',
-            textShadow: '0 0 80px rgba(255,0,0,0.6), 20px 20px 60px rgba(0,0,0,0.9)',
-            WebkitTextStroke: '2px rgba(255,255,255,0.1)',
-          }}>
-            IRON
-          </div>
-            <div style={{
-              fontFamily: "var(--font-orbitron), monospace",
-              fontSize: 13,
-              color: 'rgba(255,255,255,0.7)',
-              marginTop: 14,
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase',
-              fontWeight: 600,
-            }}>
-              MARK L
+            <div className="hero-meta-center">
+              <b>Mark L · Arc Reactor</b>
+              Head-tracked 3D portrait
+            </div>
+            <div className="hero-meta-right">
+              <b>Malibu Compound</b>
+              34.0259° N / 118.7798° W
             </div>
           </div>
-          <div />
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'flex-end',
-            textAlign: 'right',
-            padding: '0 8%',
-            opacity: heroRevealed ? 1 : 0,
-            transform: heroRevealed ? 'translateX(0)' : 'translateX(30px)',
-            transition: 'opacity 1.3s ease 0.7s, transform 1.3s ease 0.7s',
-          }}>
-            <div style={{
-              fontFamily: "'Tourney', 'Impact', 'Arial Black', sans-serif",
-              fontSize: 'clamp(70px, 10vw, 140px)',
-              fontWeight: 900,
-              lineHeight: 0.8,
-              letterSpacing: '0.15em',
-              color: '#ff0000',
-              textTransform: 'uppercase',
-              textShadow: '0 0 80px rgba(255,0,0,0.6), -20px 20px 60px rgba(0,0,0,0.9)',
-              WebkitTextStroke: '2px rgba(255,255,255,0.1)',
-            }}>
-              MAN
+
+          <h1 className={`hero-stage ${heroRevealed ? 'is-revealed' : ''}`}>
+            <span className="hero-block hero-block-left">
+              <span className="hero-kicker">
+                <span className="hero-kicker-index">01</span>
+                <span className="hero-kicker-line" />
+                Armor
+              </span>
+              <span className="hero-word">Iron</span>
+              <span className="hero-caption">Mark L · Titanium–Gold Alloy</span>
+            </span>
+
+            <span className="hero-block hero-block-right">
+              <span className="hero-kicker">
+                <span className="hero-kicker-index">MK</span>
+                <span className="hero-kicker-line" />
+                Arc Reactor
+              </span>
+              <span className="hero-word hero-word-red">Man</span>
+              <span className="hero-caption">3 GW · Palladium-free core</span>
+            </span>
+          </h1>
+
+          <span className="hero-mark" aria-hidden="true">
+            Head-tracked parallax
+          </span>
+
+          <div className={`hero-footer ${heroRevealed ? 'is-revealed' : ''}`}>
+            <span className="hero-footer-spacer" />
+            <div className="hero-dock">
+              <TrackingControl
+                isTracking={isTracking}
+                onToggle={toggleHead}
+                sensitivity={sensitivity}
+                onSensitivityChange={setSensitivity}
+              />
+              <span className="hero-dock-hint">
+                {isTracking
+                  ? 'Move your head — the room responds'
+                  : 'Or move your cursor to tilt the armor'}
+              </span>
             </div>
-            <div style={{
-              fontFamily: "var(--font-orbitron), monospace",
-              fontSize: 13,
-              color: 'rgba(255,255,255,0.7)',
-              marginTop: 14,
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase',
-              fontWeight: 600,
-            }}>
-              ARC REACTOR
+            <span className="hero-footer-spacer" />
+            <div className="scroll-cue">
+              <span>Scroll to explore</span>
+              <span className="scroll-line" aria-hidden="true" />
             </div>
           </div>
         </div>
-
-        {/* Head tracking button — bottom center */}
-        {heroRevealed && (
-          <div style={{
-            position: 'absolute',
-            bottom: 40,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 8,
-          }}>
-            <button
-              id="hero-head-tracking-btn"
-              onClick={toggleHead}
-              style={{
-                padding: '12px 28px',
-                background: isTracking ? 'rgba(204,0,0,0.15)' : 'rgba(255,255,255,0.06)',
-                color: isTracking ? '#ff4444' : 'rgba(241,245,249,0.85)',
-                border: `1px solid ${isTracking ? 'rgba(204,0,0,0.6)' : 'rgba(255,255,255,0.15)'}`,
-                borderRadius: 2,
-                cursor: 'pointer',
-                fontFamily: "var(--font-rajdhani), sans-serif",
-                fontSize: 13,
-                fontWeight: 600,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
-                backdropFilter: 'blur(8px)',
-                transition: 'all 0.25s',
-                boxShadow: isTracking ? '0 0 24px rgba(204,0,0,0.3)' : 'none',
-              }}
-            >
-              {isTracking ? '⊙ HEAD TRACKING ON' : '⊙ ENABLE HEAD TRACKING'}
-            </button>
-            {isTracking && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                background: 'rgba(4,4,6,0.7)',
-                padding: '6px 14px',
-                borderRadius: 2,
-                border: '1px solid rgba(204,0,0,0.15)',
-              }}>
-                <span style={{ fontFamily: "var(--font-rajdhani)", fontSize: 11, color: 'rgba(241,245,249,0.5)', letterSpacing: '0.1em' }}>SENSITIVITY</span>
-                <input
-                  type="range" min={0.1} max={4.0} step={0.05}
-                  value={sensitivity}
-                  onChange={(e) => setSensitivity(Number(e.target.value))}
-                  style={{ accentColor: '#cc0000', width: 90, cursor: 'pointer' }}
-                />
-                <span style={{ fontFamily: "var(--font-orbitron)", fontSize: 10, color: '#cc0000' }}>{sensitivity.toFixed(1)}x</span>
-              </div>
-            )}
-            <div style={{
-              fontFamily: "var(--font-rajdhani), sans-serif",
-              fontSize: 11,
-              letterSpacing: '0.12em',
-              color: 'rgba(241,245,249,0.3)',
-              textTransform: 'uppercase',
-            }}>
-              SCROLL TO EXPLORE
-            </div>
-          </div>
-        )}
       </section>
 
-      {/* ════════════════════════════════════════════════════════
-          SECTION 2 — SPECS / STATS (pure CSS, zero GPU cost)
-      ════════════════════════════════════════════════════════ */}
       <section
         id="stats"
-        style={{
-          position: 'relative',
-          width: '100%',
-          minHeight: '100vh',
-          padding: '140px 60px 100px',
-          background: 'radial-gradient(ellipse at center, #0a0000 0%, #000000 70%)',
-          overflow: 'hidden',
-        }}
+        ref={statsRef}
+        className={`specs ${statsInView ? 'is-visible' : ''}`}
       >
-        {/* Background grid lines */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          backgroundImage:
-            'linear-gradient(rgba(255,0,0,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,0,0,0.06) 1px, transparent 1px)',
-          backgroundSize: '80px 80px',
-          pointerEvents: 'none',
-        }} />
-
-        {/* Red glow orb */}
-        <div style={{
-          position: 'absolute', top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: 600, height: 600,
-          background: 'radial-gradient(ellipse, rgba(204,0,0,0.08) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-
-        <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto' }}>
-          {/* Section label */}
-          <div style={{
-            fontFamily: "'Tourney', sans-serif",
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: '0.5em',
-            color: '#ff0000',
-            textTransform: 'uppercase',
-            marginBottom: 18,
-            textShadow: '0 0 30px rgba(255,0,0,0.6)',
-          }}>
-            ◆ SUIT SPECIFICATIONS ◆
+        <div className="specs-progress" aria-hidden="true">
+          <span>Scroll</span>
+          <div className="specs-progress-track">
+            <span className="specs-progress-fill" ref={progressFillRef} />
           </div>
-          <h2 style={{
-            fontFamily: "'Tourney', 'Impact', sans-serif",
-            fontSize: 'clamp(36px, 6vw, 72px)',
-            fontWeight: 900,
-            color: 'transparent',
-            WebkitTextStroke: '2px #ff0000',
-            margin: '0 0 70px',
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            textShadow: '0 0 60px rgba(255,0,0,0.4)',
-          }}>
-            MARK L DIAGNOSTICS
-          </h2>
+          <span>06</span>
+        </div>
 
-          {/* Stat cards grid */}
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 20,
-            justifyContent: 'center',
-          }}>
-            <StatCard icon="⚡" label="Arc Reactor Output" value="3 GW" color="#cc0000" />
-            <StatCard icon="🚀" label="Max Flight Speed" value="Mach 3" color="#cc0000" />
-            <StatCard icon="🛡️" label="Titanium-Gold Alloy" value="12mm" unit="armor" color="#c8a84b" />
-            <StatCard icon="🎯" label="AI Targeting Latency" value="0.3" unit="ms" color="#c8a84b" />
-            <StatCard icon="🧠" label="J.A.R.V.I.S. Threads" value="4096" color="#cc0000" />
-            <StatCard icon="🌡️" label="Suit Temp Tolerance" value="3000" unit="°C" color="#c8a84b" />
-          </div>
-
-          {/* Quote */}
-          <div style={{
-            marginTop: 80,
-            padding: '32px 40px',
-            borderLeft: '3px solid #cc0000',
-            background: 'rgba(204,0,0,0.05)',
-          }}>
-            <p style={{
-              fontFamily: "var(--font-rajdhani), sans-serif",
-              fontSize: 22,
-              fontStyle: 'italic',
-              color: 'rgba(241,245,249,0.7)',
-              margin: 0,
-              lineHeight: 1.5,
-            }}>
-              &ldquo;The suit and I are one.&rdquo;
-            </p>
-            <div style={{
-              fontFamily: "var(--font-orbitron), monospace",
-              fontSize: 11,
-              color: '#cc0000',
-              marginTop: 12,
-              letterSpacing: '0.15em',
-            }}>
-              — TONY STARK, AVENGERS: INFINITY WAR
+        <div className="specs-inner">
+          <header className="specs-head">
+            <div className="reveal">
+              <span className="eyebrow">02 — Specifications</span>
+              <h2 className="specs-title">
+                Engineered
+                <br />
+                <span className="outline-text">To Endure</span>
+              </h2>
             </div>
+            <p className="specs-lede reveal">
+              Every plate, pulse, and processor is tuned for one purpose: keeping
+              the wearer alive long enough to finish the job. A dossier on the
+              Mark L platform.
+            </p>
+          </header>
+
+          <div className="specs-grid">
+            <article
+              className="spec-feature reveal"
+              onPointerMove={handleFeatureMove}
+              onPointerLeave={handleFeatureLeave}
+            >
+              <div className="spec-feature-spotlight" aria-hidden="true" />
+
+              <div className="spec-feature-tilt">
+                <div className="spec-feature-head">
+                  <span>Core System</span>
+                  <span className="spec-feature-index">SPEC / 01</span>
+                </div>
+
+                <div className="reactor" aria-hidden="true">
+                  <div className="reactor-ticks" />
+                  <div className="reactor-ring r1" />
+                  <div className="reactor-ring r2" />
+                  <div className="reactor-ring r3" />
+                  <div className="reactor-core" />
+                </div>
+
+                <div className="spec-feature-body">
+                  <p className="spec-feature-label">Arc Reactor Output</p>
+                  <p className="spec-feature-value">
+                    <span className="spec-feature-number" ref={featureValueRef}>
+                      3.0
+                    </span>
+                    <span className="spec-feature-unit">GW</span>
+                  </p>
+                  <p className="spec-feature-note">
+                    A self-sustaining palladium-free core, cradled in a vibranium
+                    housing and tuned for zero-downtime output.
+                  </p>
+                  <div className="spec-bars" aria-hidden="true">
+                    {Array.from({ length: 7 }).map((_, index) => (
+                      <span key={index} className={index < 6 ? 'is-live' : ''} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <div className="spec-list">
+              {SPECS.map((spec, index) => (
+                <SpecificationRow
+                  key={spec.name}
+                  index={index + 1}
+                  name={spec.name}
+                  sub={spec.sub}
+                  value={spec.value}
+                  unit={spec.unit}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="specs-quote reveal">
+            <span className="quote-mark" aria-hidden="true">
+              “
+            </span>
+            <blockquote>
+              <p>The suit and I are one.</p>
+              <cite>Tony Stark · Avengers: Infinity War</cite>
+            </blockquote>
+            <svg
+              className="quote-glyph"
+              width="46"
+              height="46"
+              viewBox="0 0 46 46"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle cx="23" cy="23" r="21" stroke="rgba(201,164,92,0.4)" />
+              <circle cx="23" cy="23" r="12" stroke="rgba(236,232,223,0.25)" />
+              <circle cx="23" cy="23" r="4.5" fill="#cf1f2c" />
+            </svg>
           </div>
         </div>
       </section>
 
-      {/* ════════════════════════════════════════════════════════
-          SECTION 3 — GARAGE (3d.glb)
-      ════════════════════════════════════════════════════════ */}
       <section
         id="garage"
         ref={garageRef}
-        style={{
-          position: 'relative',
-          width: '100%',
-          height: '100vh',
-          overflow: 'hidden',
-          background: '#000',
-        }}
+        className={`garage ${garageInView ? 'is-visible' : ''}`}
       >
-        {/* 3D canvas */}
-        <div style={{ position: 'absolute', inset: 0 }}>
+        <div className="garage-canvas">
           {garageHasBeenInView && (
             <ThreeScene
               headOffsetRef={headTracking.offsetRef}
@@ -686,181 +740,114 @@ export function ImmersiveExperience() {
           )}
         </div>
 
-        {/* Vignette */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.65) 100%)',
-          pointerEvents: 'none',
-        }} />
+        <div className="garage-vignette" />
+        <div className="garage-fade-top" />
+        <div className="garage-fade-bottom" />
 
-        {/* Top fade */}
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 160,
-          background: 'linear-gradient(to bottom, #000, transparent)',
-          pointerEvents: 'none',
-        }} />
-
-        {/* Label */}
-        <div style={{
-          position: 'absolute',
-          top: 88,
-          left: 60,
-          pointerEvents: 'none',
-        }}>
-          <div style={{
-            fontFamily: "var(--font-rajdhani), sans-serif",
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: '0.28em',
-            color: '#cc0000',
-            textTransform: 'uppercase',
-            marginBottom: 8,
-          }}>
-            ─── MALIBU COMPOUND
-          </div>
-          <h2 style={{
-            fontFamily: "var(--font-orbitron), monospace",
-            fontSize: 'clamp(24px, 3.5vw, 48px)',
-            fontWeight: 700,
-            color: '#f1f5f9',
-            margin: 0,
-            letterSpacing: '0.02em',
-          }}>
-            THE GARAGE
-          </h2>
-        </div>
-
-        {/* Head tracking control — bottom */}
-        <div style={{
-          position: 'absolute',
-          bottom: 36,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 10,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          <button
-            id="garage-head-tracking-btn"
-            onClick={toggleHead}
-            style={{
-              padding: '10px 24px',
-              background: isTracking ? 'rgba(204,0,0,0.15)' : 'rgba(255,255,255,0.06)',
-              color: isTracking ? '#ff4444' : 'rgba(241,245,249,0.8)',
-              border: `1px solid ${isTracking ? 'rgba(204,0,0,0.6)' : 'rgba(255,255,255,0.15)'}`,
-              borderRadius: 2,
-              cursor: 'pointer',
-              fontFamily: "var(--font-rajdhani), sans-serif",
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              backdropFilter: 'blur(8px)',
-              transition: 'all 0.25s',
-              boxShadow: isTracking ? '0 0 20px rgba(204,0,0,0.25)' : 'none',
-            }}
-          >
-            {isTracking ? '⊙ HEAD TRACKING ON' : '⊙ ENABLE HEAD TRACKING'}
-          </button>
-          {isTracking && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              background: 'rgba(4,4,6,0.7)', padding: '5px 12px',
-              borderRadius: 2, border: '1px solid rgba(204,0,0,0.15)',
-            }}>
-              <span style={{ fontFamily: "var(--font-rajdhani)", fontSize: 11, color: 'rgba(241,245,249,0.5)', letterSpacing: '0.1em' }}>SENSITIVITY</span>
-              <input
-                type="range" min={0.1} max={4.0} step={0.05}
-                value={sensitivity}
-                onChange={(e) => setSensitivity(Number(e.target.value))}
-                style={{ accentColor: '#cc0000', width: 90, cursor: 'pointer' }}
-              />
-              <span style={{ fontFamily: "var(--font-orbitron)", fontSize: 10, color: '#cc0000' }}>{sensitivity.toFixed(1)}x</span>
+        <div className="garage-overlay">
+          <div className="garage-top">
+            <div className="garage-heading">
+              <span className="garage-index">03 — The Hangar</span>
+              <h2 className="garage-title">The Garage</h2>
+              <p className="garage-sub">Malibu Compound · Sub-level 02</p>
             </div>
-          )}
+
+            <div className="garage-status">
+              <span className="live-badge">
+                <span className="live-dot" aria-hidden="true" />
+                {isTracking ? 'Tracking engaged' : 'Live feed'}
+              </span>
+              <span>Suit bay · 07 vehicles in residence</span>
+            </div>
+          </div>
+
+          <div className="garage-bottom">
+            <div className="garage-dock">
+              <div className="garage-dock-label">
+                <b>Motion Tracking</b>
+                <span>{isTracking ? 'Camera feed active' : 'Webcam standby'}</span>
+              </div>
+              <TrackingControl
+                isTracking={isTracking}
+                onToggle={toggleHead}
+                sensitivity={sensitivity}
+                onSensitivityChange={setSensitivity}
+              />
+            </div>
+
+            <div className="garage-hint">
+              <span>Move your head to look around</span>
+              <span className="garage-hint-line" aria-hidden="true" />
+            </div>
+          </div>
         </div>
+
+        <span className="garage-crosshair left" aria-hidden="true" />
+        <span className="garage-crosshair right" aria-hidden="true" />
       </section>
 
-      {/* ════════════════════════════════════════════════════════
-          SECTION 4 — FOOTER
-      ════════════════════════════════════════════════════════ */}
-      <footer style={{
-        position: 'relative',
-        width: '100%',
-        padding: '80px 60px 60px',
-        background: '#000',
-        borderTop: '1px solid rgba(204,0,0,0.2)',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          backgroundImage: 'linear-gradient(rgba(204,0,0,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(204,0,0,0.03) 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-          pointerEvents: 'none',
-        }} />
+      <footer className="site-footer">
+        <div className="footer-inner">
+          <div className="footer-grid">
+            <div>
+              <div className="footer-brand-row">
+                <ReactorMark size={40} />
+                <div>
+                  <span className="footer-brand-name">Stark</span>
+                  <span className="footer-brand-sub">Industries</span>
+                </div>
+              </div>
+              <p className="footer-desc">
+                An immersive Iron Man experience with real-time webcam head
+                tracking, powered by MediaPipe and Three.js. Move your head — the
+                room responds.
+              </p>
+            </div>
 
-        <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-          {/* Logo large */}
-          <div style={{ marginBottom: 24 }}>
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <circle cx="24" cy="24" r="22" stroke="rgba(204,0,0,0.5)" strokeWidth="1.5" />
-              <circle cx="24" cy="24" r="13" stroke="rgba(200,168,75,0.5)" strokeWidth="1" />
-              <circle cx="24" cy="24" r="6" fill="#cc0000" style={{ filter: 'drop-shadow(0 0 8px #ff0000)' }} />
-            </svg>
+            <div>
+              <h3 className="footer-col-title">Explore</h3>
+              <div className="footer-links">
+                {NAV_ITEMS.map((item) => (
+                  <button
+                    key={item.id}
+                    className="footer-link"
+                    onClick={() => scrollTo(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="footer-col-title">Signal</h3>
+              <dl className="footer-meta-list">
+                <div>
+                  <dt>Location</dt>
+                  <dd>Malibu, California</dd>
+                </div>
+                <div>
+                  <dt>Stack</dt>
+                  <dd>MediaPipe · Three.js</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>Systems online</dd>
+                </div>
+              </dl>
+            </div>
           </div>
 
-          <div style={{
-            fontFamily: "var(--font-orbitron), monospace",
-            fontSize: 22,
-            fontWeight: 700,
-            letterSpacing: '0.25em',
-            color: '#f1f5f9',
-            marginBottom: 8,
-          }}>
-            STARK INDUSTRIES
-          </div>
-          <div style={{
-            fontFamily: "var(--font-rajdhani), sans-serif",
-            fontSize: 12,
-            letterSpacing: '0.2em',
-            color: '#cc0000',
-            marginBottom: 40,
-          }}>
-            ADVANCED WEAPONS & TECHNOLOGY
+          <div className="footer-wordmark" aria-hidden="true">
+            ST<span>A</span>RK
           </div>
 
-          <p style={{
-            fontFamily: "var(--font-inter), sans-serif",
-            fontSize: 13,
-            color: 'rgba(241,245,249,0.3)',
-            maxWidth: 480,
-            lineHeight: 1.7,
-            margin: 0,
-          }}>
-            Immersive Iron Man experience with real-time WebCam head tracking powered by MediaPipe &amp; Three.js.
-            Move your head — the 3D world responds.
-          </p>
-
-          <div style={{
-            marginTop: 48,
-            fontFamily: "var(--font-rajdhani), sans-serif",
-            fontSize: 11,
-            letterSpacing: '0.15em',
-            color: 'rgba(241,245,249,0.2)',
-            textTransform: 'uppercase',
-          }}>
-            © 2026 — Head-Tracked 3D Experience
+          <div className="footer-bottom">
+            <span>© 2026 Stark Industries — Fan concept</span>
+            <span>Head-tracked 3D experience</span>
           </div>
         </div>
       </footer>
-
-      {/* Global scroll styles */}
-      <style>{`
-        html { scroll-behavior: smooth; }
-        body { overflow-x: hidden; }
-      `}</style>
     </>
   );
 }

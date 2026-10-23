@@ -1,31 +1,32 @@
 import type { Metadata } from 'next';
-import { Inter, Orbitron, Rajdhani } from 'next/font/google';
+import { Anton, Chakra_Petch, Sora } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({
+const display = Anton({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-display',
+  display: 'swap',
+});
+
+const body = Sora({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600'],
-  variable: '--font-inter',
+  variable: '--font-body',
   display: 'swap',
 });
 
-const orbitron = Orbitron({
-  subsets: ['latin'],
-  weight: ['400', '500', '700', '900'],
-  variable: '--font-orbitron',
-  display: 'swap',
-});
-
-const rajdhani = Rajdhani({
+const tech = Chakra_Petch({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
-  variable: '--font-rajdhani',
+  variable: '--font-tech',
   display: 'swap',
 });
 
 export const metadata: Metadata = {
   title: 'IRON MAN — Immersive Experience',
-  description: 'An immersive Iron Man experience with head-tracked 3D parallax. Explore the suit, the garage, and the arc reactor.',
+  description:
+    'An immersive Iron Man experience with head-tracked 3D parallax. Explore the suit, the garage, and the arc reactor.',
   openGraph: {
     title: 'IRON MAN — Immersive Head-Tracked 3D Experience',
     description: 'Experience Iron Man like never before with real-time head tracking.',
@@ -46,7 +47,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${orbitron.variable} ${rajdhani.variable}`}
+      className={`${display.variable} ${body.variable} ${tech.variable}`}
     >
       <body>{children}</body>
     </html>
